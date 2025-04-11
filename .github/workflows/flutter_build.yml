@@ -95,9 +95,9 @@ jobs:
         shell: bash
         run: |
           sed -i 's/^AppVersion=.*/AppVersion=${{ steps.version.outputs.version }}/' build_tools/pack_windows.iss
-          sed -i 's|^OutputDir=.*|OutputDir=build\\\\windows-installer|' build_tools/pack_windows.iss
+          sed -i 's|^OutputDir=.*|OutputDir=build\\windows-installer|' build_tools/pack_windows.iss
           sed -i 's/^OutputBaseFilename=.*/OutputBaseFilename=SigaAutomator-${{ steps.version.outputs.version }}_win_64/' build_tools/pack_windows.iss
-          sed -i 's|^Source: .*|Source: "build\\\\windows\\\\x64\\\\runner\\\\Release\\\\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs|' build_tools/pack_windows.iss
+          sed -i 's|^Source: .*|Source: "build\\windows\\x64\\runner\\Release\\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs|' build_tools/pack_windows.iss
 
       - name: Install Inno Setup
         run: choco install innosetup --no-progress

@@ -2,11 +2,11 @@
 
 [Setup]
 AppName=Siga Automator
-AppVersion=1.0.7
+AppVersion=AppVersion
 DefaultDirName={commonpf}\Siga Automator
 DefaultGroupName=Siga Automator
 OutputDir= "outputdirpath"
-OutputBaseFilename=SigaAutomator-1.0.7_win_64
+OutputBaseFilename=SigaAutomator-AppVersion_win_64
 Compression=lzma2
 SolidCompression=yes
 
