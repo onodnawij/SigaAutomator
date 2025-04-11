@@ -29,24 +29,33 @@ jobs:
         with:
           flutter-version: '3.29.2'
           cache: true
-      
-      - name: Install specific NDK version
-        shell: bash
+
+      - name: Cache NDK
+        id: ndk-cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.ANDROID_SDK_ROOT }}\ndk\27.0.12077973
+          key: ndk-27.0.12077973
+
+      - name: Install NDK 27.0.12077973 (if not cached)
+        if: steps.ndk-cache.outputs.cache-hit != 'true'
+        shell: pwsh
         run: |
-          yes | "${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager" "ndk;27.0.12077973"
+          & "${env:ANDROID_SDK_ROOT}\cmdline-tools\latest\bin\sdkmanager.bat" "ndk;27.0.12077973"
 
       - name: Set NDK environment variable
+        shell: pwsh
         run: |
-          echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/27.0.12077973" >> $GITHUB_ENV
-          echo "ANDROID_NDK_ROOT=$ANDROID_SDK_ROOT/ndk/27.0.12077973" >> $GITHUB_ENV
+          echo "ANDROID_NDK_HOME=${env:ANDROID_SDK_ROOT}\ndk\27.0.12077973" >> $env:GITHUB_ENV
+          echo "ANDROID_NDK_ROOT=${env:ANDROID_SDK_ROOT}\ndk\27.0.12077973" >> $env:GITHUB_ENV
 
       - name: Cache Gradle & Android build
         uses: actions/cache@v4
         with:
           path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-            ~/.android/build-cache
+            ${{ env.USERPROFILE }}\.gradle\caches
+            ${{ env.USERPROFILE }}\.gradle\wrapper
+            ${{ env.USERPROFILE }}\.android\build-cache
           key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
           restore-keys: |
             gradle-${{ runner.os }}-
@@ -55,42 +64,43 @@ jobs:
         run: flutter pub get
 
       - name: Create .env file
-        shell: bash
+        shell: pwsh
         run: |
-          echo "SUPABASE_PROJ=${{ secrets.SUPABASE_PROJ }}" >> .env
-          echo "SUPABASE_KEY=${{ secrets.SUPABASE_KEY }}" >> .env
-          echo "TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}" >> .env
-          echo "TELEGRAM_CHAT_ID=${{ secrets.TELEGRAM_CHAT_ID }}" >> .env
-          echo "KEYSTORE_FILE=${{ secrets.KEYSTORE_FILE }}" >> .env
-          echo "STORE_PASSWORD=${{ secrets.STORE_PASSWORD }}" >> .env
-          echo "KEY_PASSWORD=${{ secrets.KEY_PASSWORD }}" >> .env
-          echo "KEY_ALIAS=${{ secrets.KEY_ALIAS }}" >> .env
+          Set-Content -Encoding utf8 .env "SUPABASE_PROJ=${{ secrets.SUPABASE_PROJ }}"
+          Add-Content .env "SUPABASE_KEY=${{ secrets.SUPABASE_KEY }}"
+          Add-Content .env "TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}"
+          Add-Content .env "TELEGRAM_CHAT_ID=${{ secrets.TELEGRAM_CHAT_ID }}"
+          Add-Content .env "KEYSTORE_FILE=${{ secrets.KEYSTORE_FILE }}"
+          Add-Content .env "STORE_PASSWORD=${{ secrets.STORE_PASSWORD }}"
+          Add-Content .env "KEY_PASSWORD=${{ secrets.KEY_PASSWORD }}"
+          Add-Content .env "KEY_ALIAS=${{ secrets.KEY_ALIAS }}"
 
       - name: Decode and decrypt keystore zip
-        shell: bash
+        shell: pwsh
         run: |
-          echo "${{ secrets.KEYSTORE_ZIP }}" | base64 -d > keystore.zip.gpg
-          gpg --batch --yes --passphrase "${{ secrets.STORE_PASSWORD }}" --output keystore.zip --decrypt keystore.zip.gpg
-          unzip -o keystore.zip -d android/app
+          [System.Convert]::FromBase64String("${{ secrets.KEYSTORE_ZIP }}") | Set-Content -Encoding Byte keystore.zip.gpg
+          & gpg --batch --yes --passphrase "${{ secrets.STORE_PASSWORD }}" --output keystore.zip --decrypt keystore.zip.gpg
+          Expand-Archive -Path keystore.zip -DestinationPath android/app -Force
 
       - name: Get app version
         id: version
-        shell: bash
+        shell: pwsh
         run: |
-          VERSION=$(grep '^version: .*+.*' pubspec.yaml | sed -E 's/version: ([^+]+)\+.*/\1/')
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          $versionLine = Select-String -Path "pubspec.yaml" -Pattern "^version: .*?\+.*" | ForEach-Object { $_.Line }
+          $version = $versionLine -replace "version: ([^+]+)\+.*", '$1'
+          echo "version=$version" >> $env:GITHUB_OUTPUT
 
       - name: Build APK (split per ABI)
         run: flutter build apk --release --split-per-abi --dart-define-from-file=.env
 
       - name: Rename APKs
-        shell: bash
+        shell: pwsh
         run: |
-          mkdir renamed-apks
-          for file in build/app/outputs/flutter-apk/app-*-release.apk; do
-            abi=$(basename "$file" | cut -d'-' -f2)
-            mv "$file" "renamed-apks/SigaAutomator-${{ steps.version.outputs.version }}_${abi}.apk"
-          done
+          New-Item -ItemType Directory -Path "renamed-apks" -Force | Out-Null
+          Get-ChildItem -Path "build\app\outputs\flutter-apk\app-*-release.apk" | ForEach-Object {
+            $abi = $_.Name -split '-' | Select-Object -Index 1
+            Rename-Item -Path $_.FullName -NewName "renamed-apks\SigaAutomator-${{ steps.version.outputs.version }}_$abi.apk"
+          }
 
       - name: Upload Android APKs
         uses: actions/upload-artifact@v4
@@ -102,33 +112,37 @@ jobs:
         run: flutter build windows --release --dart-define-from-file=.env
 
       - name: Modify .iss with version and output dir
-        shell: bash
+        shell: pwsh
         run: |
-          sed -i 's/^AppVersion=.*/AppVersion=${{ steps.version.outputs.version }}/' build_tools/pack_windows.iss
-          sed -i 's|^OutputDir=.*|OutputDir="..\\windows-installer"|' build_tools/pack_windows.iss
-          sed -i 's/^OutputBaseFilename=.*/OutputBaseFilename=SigaAutomator-${{ steps.version.outputs.version }}_win_64/' build_tools/pack_windows.iss
-          sed -i 's|^Source: .*|Source: "..\\build\\windows\\x64\\runner\\Release\\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs|' build_tools/pack_windows.iss
+          (Get-Content "build_tools\pack_windows.iss") `
+            -replace '^AppVersion=.*', "AppVersion=${{ steps.version.outputs.version }}" `
+            -replace '^OutputDir=.*', 'OutputDir="..\\windows-installer"' `
+            -replace '^OutputBaseFilename=.*', "OutputBaseFilename=SigaAutomator-${{ steps.version.outputs.version }}_win_64" `
+            -replace '^Source: .*', 'Source: "..\\build\\windows\\x64\\runner\\Release\\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs' `
+            | Set-Content "build_tools\pack_windows.iss"
 
       - name: Install Inno Setup
         run: choco install innosetup --no-progress
 
       - name: Create Windows Installer with Inno Setup
         run: |
-          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" build_tools\pack_windows.iss
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "build_tools\pack_windows.iss"
 
       - name: Upload Windows Installer
         uses: actions/upload-artifact@v4
         with:
           name: SigaAutomator-${{ steps.version.outputs.version }}-windows
-          path: windows-installer/*.exe
+          path: windows-installer\*.exe
 
       - name: Generate Changelog from Git Commits
         id: changelog
         if: github.ref == 'refs/heads/main'
+        shell: pwsh
         run: |
-          echo "changelog<<EOF" >> $GITHUB_OUTPUT
-          git log $(git describe --tags --abbrev=0)..HEAD --pretty=format:"- %s" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+          $changelog = git log (git describe --tags --abbrev=0)..HEAD --pretty=format:"- %s"
+          echo "changelog<<EOF" >> $env:GITHUB_OUTPUT
+          $changelog | Out-File -Encoding utf8 -Append $env:GITHUB_OUTPUT
+          echo "EOF" >> $env:GITHUB_OUTPUT
 
       - name: Create GitHub Release
         if: github.ref == 'refs/heads/main'
