@@ -2,9 +2,9 @@ name: Flutter Release Build
 
 on:
   push:
-    branches: [ main ]
+    branches: [main, test]
   pull_request:
-    branches: [ main ]
+    branches: [main]
 
 jobs:
   build:
@@ -95,7 +95,9 @@ jobs:
         shell: bash
         run: |
           sed -i 's/^AppVersion=.*/AppVersion=${{ steps.version.outputs.version }}/' build_tools/pack_windows.iss
-          sed -i 's|^OutputDir=.*|OutputDir=build\\windows-installer|' build_tools/pack_windows.iss
+          sed -i 's|^OutputDir=.*|OutputDir=build\\\\windows-installer|' build_tools/pack_windows.iss
+          sed -i 's/^OutputBaseFilename=.*/OutputBaseFilename=SigaAutomator-${{ steps.version.outputs.version }}_win_64/' build_tools/pack_windows.iss
+          sed -i 's|^Source: .*|Source: "build\\\\windows\\\\x64\\\\runner\\\\Release\\\\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs|' build_tools/pack_windows.iss
 
       - name: Install Inno Setup
         run: choco install innosetup --no-progress
@@ -109,3 +111,24 @@ jobs:
         with:
           name: SigaAutomator-${{ steps.version.outputs.version }}-windows
           path: build/windows-installer/*.exe
+
+      - name: Generate Changelog from Git Commits
+        id: changelog
+        if: github.ref == 'refs/heads/main'
+        run: |
+          echo "changelog<<EOF" >> $GITHUB_OUTPUT
+          git log $(git describe --tags --abbrev=0)..HEAD --pretty=format:"- %s" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        if: github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v${{ steps.version.outputs.version }}
+          name: SigaAutomator v${{ steps.version.outputs.version }}
+          body: ${{ steps.changelog.outputs.changelog }}
+          files: |
+            renamed-apks/*.apk
+            build/windows-installer/*.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
