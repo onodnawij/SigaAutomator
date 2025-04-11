@@ -29,6 +29,15 @@ jobs:
         with:
           flutter-version: '3.29.2'
           cache: true
+      
+      - name: Install specific NDK version
+        run: |
+          yes | "${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager" "ndk;27.0.12077973"
+
+      - name: Set NDK environment variable
+        run: |
+          echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/27.0.12077973" >> $GITHUB_ENV
+          echo "ANDROID_NDK_ROOT=$ANDROID_SDK_ROOT/ndk/27.0.12077973" >> $GITHUB_ENV
 
       - name: Cache Gradle & Android build
         uses: actions/cache@v4
@@ -67,7 +76,7 @@ jobs:
         id: version
         shell: bash
         run: |
-          VERSION=$(grep '^version: .*+.*' pubspec.yaml | sed 's/version: //g')
+          VERSION=$(grep '^version: .*+.*' pubspec.yaml | sed -E 's/version: ([^+]+)\+.*/\1/')
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
       - name: Build APK (split per ABI)
@@ -95,9 +104,9 @@ jobs:
         shell: bash
         run: |
           sed -i 's/^AppVersion=.*/AppVersion=${{ steps.version.outputs.version }}/' build_tools/pack_windows.iss
-          sed -i 's|^OutputDir=.*|OutputDir=build\\windows-installer|' build_tools/pack_windows.iss
+          sed -i 's|^OutputDir=.*|OutputDir="..\\windows-installer"|' build_tools/pack_windows.iss
           sed -i 's/^OutputBaseFilename=.*/OutputBaseFilename=SigaAutomator-${{ steps.version.outputs.version }}_win_64/' build_tools/pack_windows.iss
-          sed -i 's|^Source: .*|Source: "build\\windows\\x64\\runner\\Release\\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs|' build_tools/pack_windows.iss
+          sed -i 's|^Source: .*|Source: "..\\build\\windows\\x64\\runner\\Release\\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs|' build_tools/pack_windows.iss
 
       - name: Install Inno Setup
         run: choco install innosetup --no-progress
@@ -110,7 +119,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: SigaAutomator-${{ steps.version.outputs.version }}-windows
-          path: build/windows-installer/*.exe
+          path: windows-installer/*.exe
 
       - name: Generate Changelog from Git Commits
         id: changelog
@@ -129,6 +138,6 @@ jobs:
           body: ${{ steps.changelog.outputs.changelog }}
           files: |
             renamed-apks/*.apk
-            build/windows-installer/*.exe
+            windows-installer/*.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
