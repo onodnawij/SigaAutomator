@@ -43,6 +43,9 @@ jobs:
 
       - name: Install dependencies
         run: flutter pub get
+      
+      - name: Temporarily clean the build
+        run: flutter clean
 
       - name: Create .env file
         shell: bash
@@ -71,7 +74,7 @@ jobs:
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
       - name: Build APK (split per ABI)
-        run: flutter build apk --split-per-abi --dart-define-from-file=.env
+        run: flutter build apk --release --split-per-abi --dart-define-from-file=.env
 
       - name: Rename APKs
         shell: bash
@@ -89,7 +92,7 @@ jobs:
           path: renamed-apks
 
       - name: Build Windows App
-        run: flutter build windows --dart-define-from-file=.env
+        run: flutter build windows --release --dart-define-from-file=.env
 
       - name: Modify .iss with version and output dir
         shell: bash
