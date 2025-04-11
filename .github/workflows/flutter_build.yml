@@ -1,0 +1,111 @@
+name: Flutter Release Build
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    name: Build Flutter APK & Windows Installer
+    runs-on: windows-latest
+
+    env:
+      STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.29.2'
+          cache: true
+
+      - name: Cache Gradle & Android build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+            ~/.android/build-cache
+          key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: |
+            gradle-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Create .env file
+        shell: bash
+        run: |
+          echo "SUPABASE_PROJ=${{ secrets.SUPABASE_PROJ }}" >> .env
+          echo "SUPABASE_KEY=${{ secrets.SUPABASE_KEY }}" >> .env
+          echo "TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}" >> .env
+          echo "TELEGRAM_CHAT_ID=${{ secrets.TELEGRAM_CHAT_ID }}" >> .env
+          echo "KEYSTORE_FILE=${{ secrets.KEYSTORE_FILE }}" >> .env
+          echo "STORE_PASSWORD=${{ secrets.STORE_PASSWORD }}" >> .env
+          echo "KEY_PASSWORD=${{ secrets.KEY_PASSWORD }}" >> .env
+          echo "KEY_ALIAS=${{ secrets.KEY_ALIAS }}" >> .env
+
+      - name: Decode and decrypt keystore zip
+        shell: bash
+        run: |
+          echo "${{ secrets.KEYSTORE_ZIP }}" | base64 -d > keystore.zip.gpg
+          gpg --batch --yes --passphrase "${{ secrets.STORE_PASSWORD }}" --output keystore.zip --decrypt keystore.zip.gpg
+          unzip -o keystore.zip -d android/app
+
+      - name: Get app version
+        id: version
+        shell: bash
+        run: |
+          VERSION=$(grep '^version: .*+.*' pubspec.yaml | sed 's/version: //g')
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Build APK (split per ABI)
+        run: flutter build apk --split-per-abi --dart-define-from-file=.env
+
+      - name: Rename APKs
+        shell: bash
+        run: |
+          mkdir renamed-apks
+          for file in build/app/outputs/flutter-apk/app-*-release.apk; do
+            abi=$(basename "$file" | cut -d'-' -f2)
+            mv "$file" "renamed-apks/SigaAutomator-${{ steps.version.outputs.version }}_${abi}.apk"
+          done
+
+      - name: Upload Android APKs
+        uses: actions/upload-artifact@v4
+        with:
+          name: SigaAutomator-${{ steps.version.outputs.version }}-android
+          path: renamed-apks
+
+      - name: Build Windows App
+        run: flutter build windows --dart-define-from-file=.env
+
+      - name: Modify .iss with version and output dir
+        shell: bash
+        run: |
+          sed -i 's/^AppVersion=.*/AppVersion=${{ steps.version.outputs.version }}/' build_tools/pack_windows.iss
+          sed -i 's|^OutputDir=.*|OutputDir=build\\windows-installer|' build_tools/pack_windows.iss
+
+      - name: Install Inno Setup
+        run: choco install innosetup --no-progress
+
+      - name: Create Windows Installer with Inno Setup
+        run: |
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" build_tools\pack_windows.iss
+
+      - name: Upload Windows Installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: SigaAutomator-${{ steps.version.outputs.version }}-windows
+          path: build/windows-installer/*.exe
