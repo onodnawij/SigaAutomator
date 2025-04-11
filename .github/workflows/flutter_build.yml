@@ -43,9 +43,6 @@ jobs:
 
       - name: Install dependencies
         run: flutter pub get
-      
-      - name: Temporarily clean the build
-        run: flutter clean
 
       - name: Create .env file
         shell: bash

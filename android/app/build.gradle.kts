@@ -1,105 +1,80 @@
-name: Flutter Release Build
+plugins {
+    id("com.android.application")
+    id("kotlin-android")
+    // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
+    id("dev.flutter.flutter-gradle-plugin")
+}
 
-on:
-  push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
+val flutterEnvNative = project(":flutter_env_native")
+apply(from = "${flutterEnvNative.projectDir}/envConfig.gradle")
 
-jobs:
-  build:
-    name: Build Flutter APK & Windows Installer
-    runs-on: windows-latest
+android {
+    namespace = "com.onodnawij.siga"
+    compileSdk = flutter.compileSdkVersion
+    //ndkVersion = flutter.ndkVersion
+    ndkVersion = "27.0.12077973"
 
-    env:
-      STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_11
+        targetCompatibility = JavaVersion.VERSION_11
+    }
 
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+    kotlinOptions {
+        jvmTarget = JavaVersion.VERSION_11.toString()
+    }
 
-      - name: Setup Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          flutter-version: '3.29.2'
-          cache: true
+    buildFeatures {
+        buildConfig = true
+    }
 
-      - name: Setup Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: '17'
+    defaultConfig {
+        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
+        applicationId = "com.onodnawij.siga"
+        // You can update the following values to match your application needs.
+        // For more information, see: https://flutter.dev/to/review-gradle-config.
+        minSdk = flutter.minSdkVersion
+        targetSdk = flutter.targetSdkVersion
+        versionCode = flutter.versionCode
+        versionName = flutter.versionName
+        buildConfigField("String", "TELEGRAM_BOT_TOKEN", "\"${project.findProperty("TELEGRAM_BOT_TOKEN") ?: "default_value"}\"")
+        buildConfigField("String", "TELEGRAM_CHAT_ID", "\"${project.findProperty("TELEGRAM_CHAT_ID") ?: "default_value"}\"")
+    }
 
-      - name: Cache Gradle & Android build
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-            ~/.android/build-cache
-          key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
-          restore-keys: gradle-${{ runner.os }}-
+    signingConfigs {
+        create("release") {
+            storeFile = file(project.findProperty("KEYSTORE_FILE"))
+            storePassword = project.findProperty("STORE_PASSWORD") as String
+            keyAlias = project.findProperty("KEY_ALIAS") as String
+            keyPassword = project.findProperty("KEY_PASSWORD") as String
+        }
+    }
 
-      - name: Install dependencies
-        run: flutter pub get
+    buildTypes {
+        getByName("release") {
+            isMinifyEnabled = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
+            signingConfig = signingConfigs.getByName("release")
+        }
+    }
+}
 
-      - name: Create .env file
-        run: |
-          echo "SUPABASE_PROJ=${{ secrets.SUPABASE_PROJ }}" >> .env
-          echo "SUPABASE_KEY=${{ secrets.SUPABASE_KEY }}" >> .env
-          echo "TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}" >> .env
-          echo "TELEGRAM_CHAT_ID=${{ secrets.TELEGRAM_CHAT_ID }}" >> .env
-          echo "KEYSTORE_FILE=${{ secrets.KEYSTORE_FILE }}" >> .env
-          echo "STORE_PASSWORD=${{ secrets.STORE_PASSWORD }}" >> .env
-          echo "KEY_PASSWORD=${{ secrets.KEY_PASSWORD }}" >> .env
-          echo "KEY_ALIAS=${{ secrets.KEY_ALIAS }}" >> .env
+flutter {
+    source = "../.."
+}
 
-      - name: Decode and decrypt keystore zip
-        run: |
-          echo "${{ secrets.KEYSTORE_ZIP }}" | base64 -d > keystore.zip.gpg
-          gpg --batch --yes --passphrase "${{ secrets.STORE_PASSWORD }}" --output keystore.zip --decrypt keystore.zip.gpg
-          unzip -o keystore.zip -d android/app
+dependencies {
+    // WorkManager dependency for background tasks
+    implementation("androidx.work:work-runtime-ktx:2.8.1")
 
-      - name: Build APK (split per ABI)
-        run: flutter build apk --split-per-abi --dart-define-from-file=.env
+    // OkHttp dependency for network requests
+    implementation("com.squareup.okhttp3:okhttp:4.9.3")
 
-      - name: Rename APKs
-        shell: bash
-        run: |
-          VERSION=$(grep 'version:' pubspec.yaml | sed 's/version: //g' | cut -d"+" -f1)
-          mkdir renamed-apks
-          for file in build/app/outputs/flutter-apk/app-*-release.apk; do
-            abi=$(basename "$file" | cut -d'-' -f2)
-            cp "$file" "renamed-apks/SigaAutomator-${VERSION}_${abi}.apk"
-          done
+    // Add this if you need to handle permissions for older Android versions
+    implementation("androidx.core:core-ktx:1.9.0")
 
-      - name: Build Windows app
-        run: flutter build windows --dart-define-from-file=.env
-
-      - name: Modify Inno Setup Script with version and output path
-        shell: bash
-        run: |
-          VERSION=$(grep 'version:' pubspec.yaml | sed 's/version: //g' | cut -d"+" -f1)
-          OUTPUT_PATH=$(pwd | sed 's/\\/\//g')  # Convert backslashes for Windows path
-          sed -i "s/^AppVersion=.*/AppVersion=${VERSION}/" build_tools/pack_windows.iss
-          sed -i "s|^OutputDir=.*|OutputDir=\"${OUTPUT_PATH}/windows-installer\"|" build_tools/pack_windows.iss
-          sed -i "s/^OutputBaseFilename=.*/OutputBaseFilename=SigaAutomator-${VERSION}_win_64/" build_tools/pack_windows.iss
-          mkdir -p windows-installer
-
-      - name: Install Inno Setup
-        run: choco install innosetup --yes
-
-      - name: Build Windows Installer
-        run: iscc build_tools\\pack_windows.iss
-
-      - name: Upload APK Artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: sigaautomator-apks
-          path: renamed-apks
-
-      - name: Upload Windows Installer
-        uses: actions/upload-artifact@v4
-        with:
-          name: sigaautomator-windows-installer
-          path: windows-installer/*.exe
+    // Logging support (optional, but good for debugging)
+    implementation("com.squareup.okhttp3:logging-interceptor:4.9.3")
+}
