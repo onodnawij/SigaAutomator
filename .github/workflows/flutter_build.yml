@@ -31,6 +31,7 @@ jobs:
           cache: true
       
       - name: Install specific NDK version
+        shell: bash
         run: |
           yes | "${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager" "ndk;27.0.12077973"
 
