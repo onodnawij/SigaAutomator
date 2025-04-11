@@ -182,7 +182,7 @@ class NotificationService : NotificationListenerService() {
         val logFile = getOfflineLogFile()
         if (logFile.exists()) {
             val fileUploadWork = OneTimeWorkRequest.Builder(TelegramWorker::class.java)
-                .setInputData(Data.Builder().putString("filePath", .absolutePath).build())
+                .setInputData(Data.Builder().putString("filePath", logFile.absolutePath).build())
                 .build()
             WorkManager.getInstance(applicationContext).enqueue(fileUploadWork)
         }
