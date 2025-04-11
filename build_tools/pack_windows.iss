@@ -11,7 +11,7 @@ Compression=lzma2
 SolidCompression=yes
 
 [Files]
-Source: "C:\Users\onodnawij\projects\flutter_siga\build\windows\x64\runner\Release\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs
+Source: "build\windows\x64\runner\Release\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs
 
 [Icons]
 Name: "{commondesktop}\Siga Automator"; Filename: "{app}\siga.exe"
