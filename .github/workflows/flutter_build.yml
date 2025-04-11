@@ -1,4 +1,4 @@
-name: Flutter Release Build
+name: Flutter Builder
 
 on:
   push:
@@ -78,7 +78,7 @@ jobs:
       - name: Decode and decrypt keystore zip
         shell: pwsh
         run: |
-          [System.Convert]::FromBase64String("${{ secrets.KEYSTORE_ZIP }}") | Set-Content -Encoding Byte keystore.zip.gpg
+          [IO.File]::WriteAllBytes("keystore.zip.gpg", [Convert]::FromBase64String("${{ secrets.KEYSTORE_ZIP }}"))
           & gpg --batch --yes --passphrase "${{ secrets.STORE_PASSWORD }}" --output keystore.zip --decrypt keystore.zip.gpg
           Expand-Archive -Path keystore.zip -DestinationPath android/app -Force
 
