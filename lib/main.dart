@@ -121,7 +121,10 @@ class MyAppState extends ConsumerState<MyApp> {
           ProcessResult result = await Process.run('getprop', [
             'ro.product.cpu.abi',
           ]);
-          final abi = result.stdout.toString().trim();
+          String abi = result.stdout.toString().trim();
+          if (abi == 'x86' || abi == 'x86_64') {
+            abi = 'x86_64';
+          }
           downloadUrl = downloadUrl.replaceAll('{abi}', abi);
         } catch (e) {
           print('Error getting CPU ABI: $e');
