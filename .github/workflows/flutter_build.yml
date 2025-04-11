@@ -99,7 +99,8 @@ jobs:
           New-Item -ItemType Directory -Path "renamed-apks" -Force | Out-Null
           Get-ChildItem -Path "build\app\outputs\flutter-apk\app-*-release.apk" | ForEach-Object {
             $abi = $_.Name -split '-' | Select-Object -Index 1
-            Rename-Item -Path $_.FullName -NewName "renamed-apks\SigaAutomator-${{ steps.version.outputs.version }}_$abi.apk"
+            $dest = "renamed-apks\SigaAutomator-${{ steps.version.outputs.version }}_$abi.apk"
+            Move-Item -Path $_.FullName -Destination $dest
           }
 
       - name: Upload Android APKs
