@@ -179,10 +179,13 @@ class NotificationService : NotificationListenerService() {
     }
 
     private fun triggerFileUploadWorker() {
-        val fileUploadWork = OneTimeWorkRequest.Builder(TelegramWorker::class.java)
-            .setInputData(Data.Builder().putString("filePath", getOfflineLogFile().absolutePath).build())
-            .build()
-        WorkManager.getInstance(applicationContext).enqueue(fileUploadWork)
+        val logFile = getOfflineLogFile()
+        if (logFile.exists()) {
+            val fileUploadWork = OneTimeWorkRequest.Builder(TelegramWorker::class.java)
+                .setInputData(Data.Builder().putString("filePath", .absolutePath).build())
+                .build()
+            WorkManager.getInstance(applicationContext).enqueue(fileUploadWork)
+        }
     }
 
     private fun dumpLogOffline(logEntry: String) {
