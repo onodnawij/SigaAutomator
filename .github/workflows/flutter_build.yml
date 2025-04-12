@@ -39,7 +39,7 @@ jobs:
         id: ndk-cache
         uses: actions/cache@v4
         with:
-          path: ${{ env.ANDROID_SDK_ROOT }}\\ndk\\27.0.12077973
+          path: C:\Users\runneradmin\AppData\Local\Android\Sdk\ndk\27.0.12077973
           key: ndk-27.0.12077973
 
       - name: Install NDK 27.0.12077973 (if not cached)
@@ -58,9 +58,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: |
-            ${{ env.USERPROFILE }}\\.gradle\\caches
-            ${{ env.USERPROFILE }}\\.gradle\\wrapper
-            ${{ env.USERPROFILE }}\\.android\\build-cache
+            C:\Users\runneradmin\.gradle\caches
+            C:\Users\runneradmin\.gradle\wrapper
+            C:\Users\runneradmin\.android\build-cache
           key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
           restore-keys: |
             gradle-${{ runner.os }}-
