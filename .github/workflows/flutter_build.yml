@@ -68,9 +68,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: |
-            C:\Users\runneradmin\.gradle\caches
-            C:\Users\runneradmin\.gradle\wrapper
-            C:\Users\runneradmin\.android\build-cache
+            ~\.gradle\caches
+            ~\runneradmin\.gradle\wrapper
+            ~\.android\build-cache
           key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
           restore-keys: |
             gradle-${{ runner.os }}-
@@ -174,3 +174,9 @@ jobs:
           files: release-artifacts/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Remove Gradle lock files
+        if: always()
+        shell: pwsh
+        run: |
+          Get-ChildItem -Recurse -Path "C:\Users\runneradmin\.gradle" -Filter "*.lock" | Remove-Item -Force -ErrorAction SilentlyContinue
