@@ -175,6 +175,12 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       
+      - name: Kill Gradle daemons
+        if: always()
+        shell: pwsh
+        run: |
+          Get-Process -Name "java" -ErrorAction SilentlyContinue | Where-Object { $_.Path -like "*gradle*" } | Stop-Process -Force -ErrorAction SilentlyContinue
+      
       - name: Remove Gradle lock files
         if: always()
         shell: pwsh
