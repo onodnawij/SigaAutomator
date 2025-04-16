@@ -420,6 +420,8 @@ class SigaApi {
   Future<List> getPoktanKegiatan({
     required String idPoktan,
     required String jenis,
+    bool detailed = true,
+    bool silent = false,
   }) async {
     final user = ref.read(userProvider).user!;
     
@@ -441,8 +443,26 @@ class SigaApi {
         .replaceAll("{jenis}", jenis);
 
     await user.initDone;
-    final resp = await _request(path, GET);
-    List data = resp["data"]["kegiatan${jenis.capitalize}"];
+
+    final ret = await withRetry(() async {
+      final resp = await _request(path, GET);
+      List keg = resp["data"]["kegiatan${jenis.capitalize}"];
+      return keg;
+    }, silent: silent,
+    );
+
+    if (ret == null && !silent) {
+      print("$idPoktan $jenis");
+    }
+
+    List data = ret ?? [];
+
+    data.sort((a, b) => parseAutoDate(b["tanggalKegiatan"])!.compareTo(parseAutoDate(a["tanggalKegiatan"])!));
+
+    if (!detailed) {
+      return data;
+    }
+    
 
     for (int i = 0; i < data.length; i++) {
       data[i] = await fetchDetail(data[i]["tanggalKegiatan"]);
@@ -480,8 +500,14 @@ class SigaApi {
         .replaceAll('{jenis}', jenis.toLowerCase());
 
     await user.initDone;
-    final resp = await _request(path, GET);
-    List data = resp["data"];
+    List data = [];
+    for (int i = 0; i < 5; i++) {
+      final resp = await _request(path, GET);
+      if (resp["data"].isNotEmpty) {
+        data = resp["data"];
+        break;
+      }
+    }
     return data;
   }
 
@@ -559,29 +585,56 @@ class SigaApi {
   }
 
   Future<List<WilKelurahan>> getKelurahan(int idKecamatan) async {
-    final resp = await _request("${URL.wilayahKelurahan}$idKecamatan", GET);
-    List kelurahanList = resp['data'];
-    return List.generate(kelurahanList.length, (i) {
-      var kelurahan = kelurahanList[i];
-      kelurahan['api'] = this;
-      return WilKelurahan.fromJson(kelurahan);
+    final ret = await withRetry(() async {
+      final resp = await _request("${URL.wilayahKelurahan}$idKecamatan", GET);
+      List kelurahanList = resp['data'];
+      return List.generate(kelurahanList.length, (i) {
+        var kelurahan = kelurahanList[i];
+        kelurahan['api'] = this;
+        return WilKelurahan.fromJson(kelurahan);
+      });
     });
+    return ret ?? [];
   }
 
   Future<List<WilRw>> getRw(int idKelurahan) async {
-    final resp = await _request("${URL.wilayahRw}$idKelurahan", GET);
-    List rwList = resp["data"];
-    return List.generate(rwList.length, (i) {
-      var rw = rwList[i];
-      rw['api'] = this;
-      return WilRw.fromJson(rw);
+    final ret = await withRetry(() async {
+        final resp = await _request("${URL.wilayahRw}$idKelurahan", GET);
+        List rwList = resp["data"];
+        return List.generate(rwList.length, (i) {
+          var rw = rwList[i];
+          rw['api'] = this;
+          return WilRw.fromJson(rw);
+        });
     });
+
+    return ret ?? [];
   }
 
   Future<List<WilRt>> getRt(int idRw) async {
-    final resp = await _request("${URL.wilayahRt}$idRw", GET);
-    List rtList = resp["data"];
-    return List.generate(rtList.length, (i) => WilRt.fromJson(rtList[i]));
+     final ret = await withRetry(() async {
+        final resp = await _request("${URL.wilayahRt}$idRw", GET);
+        List rtList = resp["data"];
+        return List.generate(rtList.length, (i) => WilRt.fromJson(rtList[i])); 
+     });
+
+    return ret ?? [];
+  }
+
+  Future<T?> withRetry<T>(Future<T> Function() fun, {bool silent = false}) async {
+    dynamic error;
+    for (int i = 0; i < 5; i++) {
+      try {
+        return await fun();
+      } catch (e) {
+        error = e;
+      }
+    }
+    if (!silent) {
+      print(error);
+      showError("SIGA lagi ucak");
+    }
+    return null;
   }
 
   Future<Map> _request(
