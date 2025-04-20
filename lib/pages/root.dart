@@ -140,7 +140,7 @@ class _UpdateScreenState extends ConsumerState<UpdateScreen> {
 
   Future<Map<String, dynamic>?> checkForUpdate() async {
     final api = ref.read(apiProvider);
-    api.showLoading(context: context, message: "Checking for updates");
+    api.showLoading(message: "Checking for updates");
     await Future.delayed(Duration(seconds: 1));
     final supabase = Supabase.instance.client;
     String platform = Platform.operatingSystem;
@@ -246,7 +246,7 @@ class _UpdateScreenState extends ConsumerState<UpdateScreen> {
 
       if (mounted) {
         blockUI(context);
-        api.showLoading(message: "Installing Updates", context: context);
+        api.showLoading(message: "Installing Updates");
         await Future.delayed(Duration(seconds: 1));
       }
 

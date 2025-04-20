@@ -4,7 +4,7 @@ import 'package:modal_bottom_sheet/modal_bottom_sheet.dart';
 import 'package:siga/api/models/user.dart';
 import 'package:siga/providers/api_provider.dart';
 import 'package:siga/providers/listing_provider.dart';
-import 'package:siga/providers/theme_provider.dart';
+// import 'package:siga/providers/theme_provider.dart';
 import 'package:siga/utils/extensions.dart';
 import 'package:siga/vars.dart';
 import 'package:skeletonizer/skeletonizer.dart';
@@ -81,7 +81,7 @@ class ListingPageState extends ConsumerState<ListingPage> {
 
   @override
   Widget build(BuildContext context) {
-    final appTheme = ref.watch(appThemeStateNotifier);
+    // final appTheme = ref.watch(appThemeStateNotifier);
     final userRef = ref.read(userProvider);
     
     WidgetsBinding.instance.addPostFrameCallback((timeStamp) async {
@@ -111,10 +111,10 @@ class ListingPageState extends ConsumerState<ListingPage> {
         padding: EdgeInsets.all(8),
         child: Container(
           padding: EdgeInsets.fromLTRB(5, 2, 5, 2),
-          decoration:
-              appTheme.isDarkModeEnabled
-                ? appTheme.theme.innerNone
-                : appTheme.theme.innerColor,
+          // decoration:
+          //     appTheme.isDarkModeEnabled
+          //       ? appTheme.theme.innerNone
+          //       : appTheme.theme.innerColor,
           child: ContentList(
             kelurahanList:
                 userRef.user!.wilKecamatan.wilKelurahan,
@@ -353,8 +353,8 @@ class _MyGridItemState extends ConsumerState<MyGridItem> {
         ),
       ],
       builder:
-          (context, controller, child) => Card(
-            elevation: 4,
+          (context, controller, child) => Card.filled(
+            color: Theme.of(context).colorScheme.surfaceContainerLow,
             child: InkWell(
               focusNode: _gridFocusNode,
               onTap: () {

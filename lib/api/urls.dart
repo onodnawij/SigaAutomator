@@ -7,12 +7,13 @@ class URL {
   static String wilayahRt = _Wilayah.rt;
   static const String poktanList = _Poktan.list;
   static const String poktanDetail = _Poktan.detail;
+  static const String poktanUpsert = _Poktan.upsert;
   static const String poktanListKegiatan = _Poktan.listKegiatan;
   static const String poktanDetailKegiatan = _Poktan.detailKegiatan;
   static const String poktanUpsertKegiatan = _Poktan.upsertKegiatan;
   static const String api = "https://siga-api-gateway.bkkbn.go.id/";
   static const String auth = "/sigaauthorizationservice/auth/signin?";
-  static const String parentRekapPK = "/rekapitulasi-data-keluarga/siga/rekap/parentRekapPK?bulan={bulan}&tahun={tahun}&page=1&recordPerPage=10&nik={nik}&nama={nama}&idProvinsi={provinsi}&idKabupaten={kabupaten}&idKecamatan={kecamatan}&idKelurahan={kelurahan}";
+  static const String parentRekapPK = "/rekapitulasi-data-keluarga/siga/rekap/parentRekapPK";
   static const String childRekapPK = "/rekapitulasi-data-keluarga/siga/rekap/childRekapPK?bulan={bulan}&tahun={tahun}&noKeluarga={kki}";
 }
 
@@ -20,6 +21,7 @@ class URL {
 class _Poktan {
   static const list = "/poktan/siga/poktan/getListPoktan?filterPencarian={param}&jenisPoktan={jenis}";
   static const detail = "/poktan/siga/poktan/getDetailPoktan?id={id}&jenisPoktan={jenis}";
+  static const upsert = "/poktan/siga/poktan/upsertPoktan{}";
   static const listKegiatan = "/poktan/siga/poktan/getListPoktanKegiatan?id={id}&jenisPoktan={jenis}";
   static const detailKegiatan = "/poktan/siga/poktan/getDetailPoktanKegiatan?id={id}&tanggalKegiatan={tanggal}&jenisPoktan={jenis}";
   static const upsertKegiatan = "/poktan/siga/poktan/upsertPoktanKegiatan?jenisPoktan={jenis}";

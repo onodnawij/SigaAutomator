@@ -5,7 +5,7 @@ import "package:intl/intl.dart";
 import "package:siga/providers/api_provider.dart";
 import "package:siga/providers/dashboard.dart";
 import "package:siga/providers/setting_provider.dart";
-import "package:siga/providers/theme_provider.dart";
+// import "package:siga/providers/theme_provider.dart";
 import "package:siga/vars.dart" as vars;
 import "package:skeletonizer/skeletonizer.dart";
 import 'package:fl_chart/fl_chart.dart';
@@ -61,7 +61,7 @@ class _HomePageState extends ConsumerState<HomePage> {
 
   @override
   Widget build(BuildContext context) {
-    final appTheme = ref.watch(appThemeStateNotifier);
+    // final appTheme = ref.watch(appThemeStateNotifier);
     
     return Scaffold(
       appBar: AppBar(
@@ -105,7 +105,7 @@ class _HomePageState extends ConsumerState<HomePage> {
         padding: const EdgeInsets.all(10.0),
         child: Container(
           padding: const EdgeInsets.all(4.0),
-          decoration: appTheme.isDarkModeEnabled ? appTheme.theme.innerNone : appTheme.theme.innerColor,
+          // decoration: appTheme.isDarkModeEnabled ? appTheme.theme.innerNone : appTheme.theme.innerColor,
           child: CustomScrollView(
             slivers: [
               SliverList(
@@ -145,13 +145,10 @@ class _HomePageState extends ConsumerState<HomePage> {
                     SizedBox(height: 20,),
                     Center(
                       child: Stack(
-                        children: [ElevatedButton(
+                        children: [FilledButton(
                           onPressed: (){
                             ref.read(rekapPoktanProvider).refresh();
                           },
-                          style: ElevatedButton.styleFrom(
-                            elevation: 5,
-                          ),
                           child: Text('show more')),]
                       ),
                     ),
@@ -194,9 +191,8 @@ class _HomePageState extends ConsumerState<HomePage> {
                     ),
                     delegate: SliverChildBuilderDelegate(
                       (BuildContext context, int index) {
-                        return Card(
-                          // color: Theme.of(context).colorScheme.surfaceBright,
-                          elevation: 4,
+                        return Card.filled(
+                          color: Theme.of(context).colorScheme.surfaceContainerLow,
                           child: InkWell(
                             borderRadius: BorderRadius.circular(10),
                             onTapUp: (details) {
@@ -255,8 +251,8 @@ class _HomePageState extends ConsumerState<HomePage> {
                     ),
                   delegate: SliverChildBuilderDelegate(
                     (BuildContext context, int index) {
-                      return Card(
-                        elevation: 4,
+                      return Card.filled(
+                        color: Theme.of(context).colorScheme.surfaceContainerLow,
                         child: InkWell(
                           borderRadius: BorderRadius.circular(10),
                           onTapUp: (details) {
@@ -314,8 +310,8 @@ class _HomePageState extends ConsumerState<HomePage> {
                     ),
                   delegate: SliverChildBuilderDelegate(
                     (BuildContext context, int index) {
-                      return Card(
-                        elevation: 4,
+                      return Card.filled(
+                        color: Theme.of(context).colorScheme.surfaceContainerLow,
                         child: InkWell(
                           borderRadius: BorderRadius.circular(10),
                           onTapUp: (details) {
@@ -359,8 +355,8 @@ class DummyData extends StatelessWidget {
     return Container(
       width: MediaQuery.of(context).size.width,
       margin: EdgeInsets.fromLTRB(5, 4, 5, 6),
-      child: Card(
-        elevation: 5,
+      child: Card.filled(
+        color: Theme.of(context).colorScheme.surfaceContainerLow,
         child: Container(
           padding: const EdgeInsets.all(8.0),
           child: Column(
@@ -425,8 +421,8 @@ class _PoktanProgressState extends State<PoktanProgress> {
     return Container(
       width: MediaQuery.of(context).size.width,
       margin: EdgeInsets.fromLTRB(5, 4, 5, 6),
-      child: Card(
-        elevation: 5,
+      child: Card.filled(
+        color: Theme.of(context).colorScheme.surfaceContainerLow,
         child: Consumer(
           builder: (context, ref, child) {
             return Skeletonizer(
@@ -435,8 +431,8 @@ class _PoktanProgressState extends State<PoktanProgress> {
                 padding: const EdgeInsets.all(8.0),
                 child: Column(
                   children: [
-                    Skeleton.ignore(
-                      ignore: true,
+                    Skeleton.keep(
+                      keep: true,
                       child: Row(
                         children: [
                           Text('Capaian Poktan'),
@@ -453,26 +449,29 @@ class _PoktanProgressState extends State<PoktanProgress> {
                     Wrap(
                       children: [SizedBox(height: 30)],
                     ),
-                    Row(
-                      children: [
-                        Column(
-                          children: [
-                            Text('Bulan Lapor'),
-                          ],
-                        ),
-                        Column(
-                          children: [
-                            Text('   :  '),
-                          ],
-                        ),
-                        Column(
-                          children: [
-                            Text(
-                              DateFormat("MMMM yyyy").format(DateTime.now()),
-                            ),
-                          ],
-                        ),
-                      ],
+                    Skeleton.keep(
+                      keep: true,
+                      child: Row(
+                        children: [
+                          Column(
+                            children: [
+                              Text('Bulan Lapor'),
+                            ],
+                          ),
+                          Column(
+                            children: [
+                              Text('   :  '),
+                            ],
+                          ),
+                          Column(
+                            children: [
+                              Text(
+                                DateFormat("MMMM yyyy").format(DateTime.now()),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
                     ),
                     Text(''),
                   ],

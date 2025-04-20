@@ -4,6 +4,7 @@ import 'package:flutter_easyloading/flutter_easyloading.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart' show DateFormat;
 import 'package:siga/providers/api_provider.dart';
+import 'package:siga/providers/dashboard.dart';
 import 'package:siga/providers/register_provider.dart';
 import 'package:siga/utils/block_ui.dart';
 import 'package:siga/utils/extensions.dart';
@@ -141,7 +142,7 @@ class _R1PageState extends ConsumerState<R1Page> {
       if ((formData["narasumber"] as List).any((elem) => elem)) {
         if (formData["maxPeserta"] != null && maxPesertaController.text.isNotEmpty) {
           blockUI(context);
-          api.showLoading(message: "Bentar yaa...", context: context);
+          api.showLoading(message: "Bentar yaa...");
           final ret = await api.autoKegiatan(
             item: kelompok,
             data: formData,
@@ -151,6 +152,7 @@ class _R1PageState extends ConsumerState<R1Page> {
           unblockUI(context);
 
           if (ret) {
+            ref.read(rekapPoktanProvider).refresh();
             Navigator.of(context).pop(true);
             api.showSuccess("Auto Kegiatan Sukses!");
           } else {
@@ -170,10 +172,14 @@ class _R1PageState extends ConsumerState<R1Page> {
       var start = DateTime(now.year, now.month - 3, 1);
       final date = await showDatePicker(context: context, firstDate: start, lastDate: now, initialDate: selectedDate, locale: Locale('id', 'ID'));
 
+      if (date == null) {
+        return;
+      }
+
       setState(() {
-        if (date != null) {
-          selectedDate = date;
-        }
+        selectedDate = date;
+        tanggalController.text = DateFormat('dd-MM-yyyy', 'id_ID').format(selectedDate);
+        updateFormData();
       });
     }
   }
