@@ -23,9 +23,14 @@ import "package:siga/providers/theme_provider.dart";
 import "package:siga/utils/versioning.dart";
 import "package:siga/vars.dart";
 import "package:supabase_flutter/supabase_flutter.dart";
+import "package:flutter/services.dart";
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  ByteData cert = await PlatformAssetBundle().load("assets/ca/lets-encrypt-r3.pem");
+  SecurityContext.defaultContext.setTrustedCertificatesBytes(cert.buffer.asInt8List());
+  
   await Supabase.initialize(
     url: const String.fromEnvironment("SUPABASE_PROJ"),
     anonKey: const String.fromEnvironment("SUPABASE_KEY"),
