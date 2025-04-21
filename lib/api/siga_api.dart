@@ -206,8 +206,15 @@ class SigaApi {
         if (c.length >= jumlah) {
           return false;
         }
-        
-        final detailKeluarga = await getChildData(keluarga["noKeluarga"]);
+
+        List detailKeluarga = [];
+        for (var i = 0; i < 5; i++) {
+          detailKeluarga = await getChildData(keluarga["noKeluarga"]);
+
+          if (detailKeluarga.isNotEmpty) {
+            break;
+          }
+        }
 
         if (c.length == jumlah) {
           return false;
@@ -277,6 +284,10 @@ class SigaApi {
     } else if (jenis == "bkl") {
       // Function populate calons
       Future<bool> populateCalonsBKL(Map keluarga, List c) async {
+        if (c.length == jumlah) {
+          return false;
+        }
+        
         final detailKeluarga = await getChildData(keluarga["noKeluarga"]);
 
         if (c.length == jumlah) {
@@ -315,7 +326,7 @@ class SigaApi {
 
       // main code is here
       List calons = [];
-      final result = await Future.wait(listKeluarga.map<Future<bool>>((keluarga) {
+      final result = await Future.wait(listKeluarga.map<Future<bool>>((keluarga) async {
         if (!anggotaNik.contains(keluarga["nik"])) {
           return populateCalonsBKL(keluarga, calons);
         } else {
@@ -574,13 +585,34 @@ class SigaApi {
   Future<List> getChildData(String kki) async {
     DateTime tanggal = DateTime.now();
 
+    var headers = {
+      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+      'Accept-Language': 'en-US,en;q=0.9',
+      'Connection': 'keep-alive',
+      'DNT': '1',
+      'Sec-Fetch-Dest': 'document',
+      'Sec-Fetch-Mode': 'navigate',
+      'Sec-Fetch-Site': 'none',
+      'Sec-Fetch-User': '?1',
+      'Upgrade-Insecure-Requests': '1',
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36',
+      'sec-ch-ua': '"Google Chrome";v="135", "Not-A.Brand";v="8", "Chromium";v="135"',
+      'sec-ch-ua-mobile': '?0',
+      'sec-ch-ua-platform': '"Windows"'
+    };
+
     var childPath = URL.childRekapPK
         .replaceAll("{bulan}", tanggal.month.toString())
         .replaceAll("{tahun}", tanggal.year.toString())
         .replaceAll("{kki}", kki.replaceAll(" ", "%20"));
      
-    final resp = await _request(childPath, GET);
-    return json.decode(resp.data);
+    final resp = await _request(childPath, GET, headers: headers);
+    final ret =  json.decode(resp.data.isEmpty ? "[]" : resp.data);
+    if (ret.isEmpty) {
+      print("WARNNG: empty return!\nurl: $childPath");
+    }
+
+    return ret;
   }
 
   Future<List> getParentData({
@@ -987,7 +1019,7 @@ class SigaApi {
       
       respData = resp.toString();
       
-    } on DioException catch (e) {
+    } on DioException catch (e, s) {
       if (e.response != null) {
         try {
           var errData = json.decode(e.response!.data);
@@ -1027,12 +1059,14 @@ class SigaApi {
           case DioExceptionType.cancel:
             respStatus = 444;
           case DioExceptionType.unknown:
-            print(e.requestOptions);
+            print(e.requestOptions.data);
             respStatus = 0;
         }
         var errMessage = apiStatus[respStatus] ?? "Gatau Kenapa";
         showError(errMessage);
         print("$errMessage\ncode: $respStatus\nmessage: $respData");
+        print("Error: $e");
+        print("stack: $s");
       }
     }
     return ApiResponse(status: respStatus, data: respData);

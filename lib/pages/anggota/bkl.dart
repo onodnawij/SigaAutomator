@@ -192,7 +192,7 @@ class _AnggotaPageBKLState extends ConsumerState<AnggotaPageBKL> {
     
     return Scaffold(
       appBar: AppBar(
-        title: Text("Anggota BKB"),
+        title: Text("Anggota BKL"),
         actions: [
           IconButton(
             icon: Icon(Icons.add_circle_outline),
