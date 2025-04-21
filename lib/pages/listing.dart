@@ -386,6 +386,7 @@ class _MyGridItemState extends ConsumerState<MyGridItem> {
                                         "$listingKey/anggota"
                                             .toLowerCase();
                                     if (supportedRoute.contains(path)) {
+                                      ref.read(listingIndexProvider.notifier).state = widget.index;
                                       Navigator.of(context).pushNamed(
                                         "/$path",
                                         arguments: widget.index,
@@ -402,6 +403,7 @@ class _MyGridItemState extends ConsumerState<MyGridItem> {
                                     var path =
                                         "$listingKey/register";
                                     if (supportedRoute.contains(path)) {
+                                      ref.read(listingIndexProvider.notifier).state = widget.index;
                                       Navigator.of(context).pushNamed(
                                         '/$listingKey/register',
                                         arguments: widget.index,

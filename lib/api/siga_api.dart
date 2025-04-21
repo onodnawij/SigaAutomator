@@ -147,6 +147,8 @@ class SigaApi {
         "lastModifiedBy": ref.read(userProvider).user!.userName,
       });
 
+      print(payload);
+
       String upsertPath = URL.poktanUpsert.replaceAll(
         "{}",
         jenis.capitalize!,
@@ -164,7 +166,6 @@ class SigaApi {
         data: payload,
         headers: headers,
       );
-
       
       if (upsertResp.status == 200) {
         return {"status": 200, "data": c.length};
@@ -184,13 +185,15 @@ class SigaApi {
     //Assertion
     listKeluarga!;
     jumlah!;
-    
+
+    // handle required "nomor" key in POST data
     int nextNomor() {
       return itemDetails["anggotaKelompok"].length > 0
         ? (int.tryParse(itemDetails["anggotaKelompok"].last["nomorUrut"]) ?? 0) + 1
         : 0;
     }
     
+    // handling duplicates
     final anggotaNik = List.generate(itemDetails["anggotaKelompok"].length, (i) {
       return itemDetails["anggotaKelompok"][i]["nik"];
     }).toList();
@@ -199,7 +202,11 @@ class SigaApi {
       // final timestamp = DateTime.now().toUtc().toIso8601String();
 
       // Function populateCalons
-      Future<bool> populateCalons(Map keluarga, List c) async {
+      Future<bool> populateCalonsBKB(Map keluarga, List c) async {
+        if (c.length >= jumlah) {
+          return false;
+        }
+        
         final detailKeluarga = await getChildData(keluarga["noKeluarga"]);
 
         if (c.length == jumlah) {
@@ -221,8 +228,8 @@ class SigaApi {
         Map calon = {
           "nik": ibu["nik"],
           "namaAnggota": ibu["nama"],
-          "nomorHp": (ibu["noTelepon"] ?? "").length > 1
-            ? ibu["noTelepon"]
+          "nomorHp": (keluarga["noTelepon"] ?? "").length > 1
+            ? keluarga["noTelepon"]
             : "-",
           "nikAnggota": anak["nik"],
           "namaAnak": anak["nama"],
@@ -236,7 +243,7 @@ class SigaApi {
           "flag": "Upsert"
         };
 
-        if (c.length == jumlah) {
+        if (c.length >= jumlah) {
           return false;
         }
 
@@ -249,7 +256,7 @@ class SigaApi {
       
       final result = await Future.wait(listKeluarga.map<Future<bool>>((keluarga) {
         if (!anggotaNik.contains(keluarga["nik"])) {
-          return populateCalons(keluarga, calons);
+          return populateCalonsBKB(keluarga, calons);
         } else {
           return Future.value(false);
         }
@@ -263,6 +270,67 @@ class SigaApi {
         calons[i].addAll({
           "nomor": nextNomor() + i,
           "nomorUrut": (nextNomor() + i).toString(),
+        });
+      }
+      
+      return upsertTask(calons);
+    } else if (jenis == "bkl") {
+      // Function populate calons
+      Future<bool> populateCalonsBKL(Map keluarga, List c) async {
+        final detailKeluarga = await getChildData(keluarga["noKeluarga"]);
+
+        if (c.length == jumlah) {
+          return false;
+        }
+
+        final sasaran = detailKeluarga.where((x) => (x["usia"] >= 55 && x["usia"] < 70) || x["hubunganDenganKK"] == "Istri").toList();
+        if (sasaran.isEmpty) {
+          return false;
+        }
+
+        sasaran.shuffle();
+
+        final isLansia = sasaran[0]["usia"] >=  60;
+
+        Map calon = {
+          "nik": sasaran[0]["nik"],
+          "namaAnggota": sasaran[0]["nama"],
+          "nomorHp": keluarga["noTelepon"],
+          "statusLansia": isLansia ? "1" : "2",
+          "tingkatKemandirian": "1",
+          "kki": keluarga["noKeluarga"],
+          "noKeluarga": keluarga["noKeluarga"],
+          "statusLansia_tbl": isLansia ? "Ya" : "Tidak",
+          "tingkatKemandirian_tbl": "Mandiri",
+          "flag": "Upsert"
+        };
+
+        if (c.length >= jumlah) {
+          return false;
+        }
+
+        c.add(calon);
+        return true;
+      }
+
+      // main code is here
+      List calons = [];
+      final result = await Future.wait(listKeluarga.map<Future<bool>>((keluarga) {
+        if (!anggotaNik.contains(keluarga["nik"])) {
+          return populateCalonsBKL(keluarga, calons);
+        } else {
+          return Future.value(false);
+        }
+      }).toList());
+      
+      if (!result.every((elem) => elem)) {
+        print("Auto Anggota: some item skipped");
+      }
+      for (var i = 0; i < calons.length; i++) {
+        calons[i].addAll({
+          "nomor": nextNomor() + i,
+          "nomorUrut": (nextNomor() + i).toString(),
+          "nomorBKL": (nextNomor() + i).toString().padLeft(3, '0'),
         });
       }
       
@@ -600,16 +668,6 @@ class SigaApi {
 
     try {
       var parsedTanggal = parseAutoDate(tanggal)!;
-
-      // String path = URL.parentRekapPK
-      //     .replaceAll("{bulan}", parsedTanggal.month.toString())
-      //     .replaceAll("{tahun}", parsedTanggal.year.toString())
-      //     .replaceAll("{nik}", anggota["nik"])
-      //     .replaceAll("{nama}", anggota["namaAnggota"])
-      //     .replaceAll("{provinsi}", item["provinsiId"].toString())
-      //     .replaceAll("{kabupaten}", item["kabupatenId"].toString())
-      //     .replaceAll("{kecamatan}", item["kecamatanId"].toString())
-      //     .replaceAll("{kelurahan}", item["kelurahanId"].toString());
       
       var filters = {
         "nama": anggota["namaAnggota"],

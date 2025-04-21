@@ -130,7 +130,7 @@ final formatUpsertPoktanBKL = {
     "mengetahuiTempat": "",
     "mengetahuiTanggal": "",
     "mengetahuiKetuaNama": "",
-    "mengetahuiPembinaNama": "HARIYANTO,SE",
+    "mengetahuiPembinaNama": "",
     "loginName": "",
     "status": "",
     "statusDate": "",

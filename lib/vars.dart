@@ -10,6 +10,7 @@ const List<String> supportedRoute = [
   "poktan/bkb/register",
   "poktan/bkl/register",
   "poktan/bkb/anggota",
+  "poktan/bkl/anggota",
 ];
 
 
