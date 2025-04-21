@@ -6,28 +6,17 @@ import 'package:flutter/services.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:open_file/open_file.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:siga/providers/api_provider.dart';
 import 'package:siga/utils/android_permission.dart';
 import 'package:siga/utils/block_ui.dart';
+import 'package:siga/utils/versioning.dart';
 import 'package:siga/vars.dart' show accessibilityGuide;
+import "package:supabase_flutter/supabase_flutter.dart";
 
-final pageControllerProvider = ChangeNotifierProvider((ref) => PageProvider());
-
-class PageProvider extends ChangeNotifier{
-  PageController controller  = PageController();
-
-  void refresh() {
-    controllerDispose();
-    controller = PageController();
-    notifyListeners();
-  }
-
-  void controllerDispose() {
-    controller.dispose();
-  }
-}
+final pageControllerProvider = Provider((ref) => PageController());
 
 class RootPage extends ConsumerStatefulWidget {
   const RootPage({super.key});
@@ -37,24 +26,16 @@ class RootPage extends ConsumerStatefulWidget {
 }
 
 
-class _RootPageState extends ConsumerState<RootPage> {
-  bool isRefreshed = false;
-  
+class _RootPageState extends ConsumerState<RootPage> {  
   @override
   Widget build(BuildContext context) {
-    final pageController = ref.read(pageControllerProvider);
-    if (!isRefreshed) {
-      pageController.refresh();
-      isRefreshed = true;
-    }
 
     return Scaffold(
       body: Consumer(
         builder: (context, ref, child) {
-          final controller = ref.watch(pageControllerProvider);
           return PageView(
             physics: NeverScrollableScrollPhysics(),
-            controller: controller.controller,
+            controller: ref.read(pageControllerProvider),
             children: [
               PermitScreen(),
               UpdateScreen(),
@@ -73,17 +54,20 @@ class PermitScreen extends ConsumerStatefulWidget {
   ConsumerState<ConsumerStatefulWidget> createState() => PermitScreenState();
 }
 
-class PermitScreenState extends ConsumerState {
+class PermitScreenState extends ConsumerState<PermitScreen> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => checkPermit());
+  }
 
-  void checkPermit() async {
+  Future<void> checkPermit() async {
     final isBound = await AccessibilityHelper.check();
     if (isBound) {
-      ref.read(pageControllerProvider)
-      .controller.nextPage(
+      return ref.read(pageControllerProvider).nextPage(
         duration: Duration(milliseconds: 300),
         curve: Curves.easeInCubic
       );
-      return;
     }
 
     if (mounted) {
@@ -123,12 +107,6 @@ class PermitScreenState extends ConsumerState {
       );
     }
   }
-  
-  @override
-  Widget build(BuildContext context) {
-    WidgetsBinding.instance.addPostFrameCallback((_) => checkPermit());
-    return Container();
-  }
 
   void requestAccessibility() async {
     final result = await AccessibilityHelper.request();
@@ -139,10 +117,15 @@ class PermitScreenState extends ConsumerState {
         Navigator.of(context).pop();
       }
       api.showSuccess("Accessibility aktif!");
-      ref.read(pageControllerProvider).controller.nextPage(duration: Duration(milliseconds: 300), curve: Curves.easeInCubic);
+      ref.read(pageControllerProvider).nextPage(duration: Duration(milliseconds: 300), curve: Curves.easeInCubic);
     } else {
       api.showError("Accessibility belum diaktifkan");
     }
+  }
+  
+  @override
+  Widget build(BuildContext context) {
+    return Container();
   }
 }
 
@@ -155,22 +138,64 @@ class UpdateScreen extends ConsumerStatefulWidget {
 
 class _UpdateScreenState extends ConsumerState<UpdateScreen> {
 
-  void runAfterInit () async {
+  Future<Map<String, dynamic>?> checkForUpdate() async {
     final api = ref.read(apiProvider);
-    
-    blockUI(context);
+    api.showLoading(message: "Checking for updates");
+    await Future.delayed(Duration(seconds: 1));
+    final supabase = Supabase.instance.client;
+    String platform = Platform.operatingSystem;
+    PackageInfo packageInfo = await PackageInfo.fromPlatform();
+    final currentVersion = packageInfo.version;
 
-    while (ref.read(isOutdatedProvider) == null) {
-      if (ref.read(isOutdatedProvider) != null) {
-        api.dismiss();
-        break;
-      }
+    Map<String, dynamic>? response;
 
-      await Future.delayed(Duration(seconds: 1));
+    try {
+      response =
+          await supabase
+              .from('app_updates')
+              .select()
+              .eq('platform', platform)
+              .single();
+    } on PostgrestException {
+      response = null;
+      api.dismiss();
+      api.showError('Cant check update');
     }
 
-    if (ref.read(isOutdatedProvider)! && mounted) {
+    if (response != null) {
+      String latestVersion = response['latest_version'];
+      String downloadUrl = response['download_url'];
+
+      if (platform == 'android') {
+        try {
+          ProcessResult result = await Process.run('getprop', [
+            'ro.product.cpu.abi',
+          ]);
+          String abi = result.stdout.toString().trim();
+          if (abi == 'x86' || abi == 'x86_64') {
+            abi = 'x86_64';
+          }
+          downloadUrl = downloadUrl.replaceAll('{abi}', abi);
+        } catch (e) {
+          print('Error getting CPU ABI: $e');
+        }
+      }
+
       api.dismiss();
+      
+      return {
+        "isOutdated": isOutdated(currentVersion, latestVersion),
+        "downloadUrl": downloadUrl,
+      };
+    } else {
+      return null;
+    }
+  }
+
+  void runAfterInit () async {
+    final updateInfo = await checkForUpdate();
+
+    if ((updateInfo?["isOutdated"] ?? false) && mounted) {
       showDialog(
         context: context,
         barrierDismissible: false,
@@ -193,7 +218,6 @@ class _UpdateScreenState extends ConsumerState<UpdateScreen> {
       );
     } else if (mounted) {
       // widget.api.showSuccess('App is up to date!');
-      unblockUI(context);
       Navigator.of(context).popAndPushNamed('/login');
     }
   }
@@ -221,7 +245,8 @@ class _UpdateScreenState extends ConsumerState<UpdateScreen> {
       api.dismiss();
 
       if (mounted) {
-        api.showLoading(message: "Installing Updates", context: context);
+        blockUI(context);
+        api.showLoading(message: "Installing Updates");
         await Future.delayed(Duration(seconds: 1));
       }
 
@@ -248,8 +273,8 @@ class _UpdateScreenState extends ConsumerState<UpdateScreen> {
     }
 
     if (mounted) {
-      unblockUI(context);
       api.dismiss();
+      unblockUI(context);
     }
     
     await OpenFile.open(filePath);

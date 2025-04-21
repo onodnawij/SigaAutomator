@@ -1,9 +1,13 @@
-extension ListEtension<T> on List<T> {
+extension ListEtension<T> on List<T>? {
   T? firstWhereOrNull(bool Function(T element) test) {
-    for (var element in this) {
+    for (var element in this ?? []) {
       if (test(element)) return element;
     }
     return null;
+  }
+
+  bool get isNullOrEmpty {
+    return this?.isEmpty ?? true;
   }
 }
 

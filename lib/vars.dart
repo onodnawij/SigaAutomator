@@ -10,10 +10,11 @@ const List<String> supportedRoute = [
   "poktan/bkb/register",
   "poktan/bkl/register",
   "poktan/bkb/anggota",
+  "poktan/bkl/anggota",
 ];
 
 
-List<String> poktanList = ['bkb', 'bkl', 'bkr', 'uppka', 'pik-r'];
+List<String> poktanList = ['bkb', 'bkr', 'bkl', 'uppka', 'pik-r'];
 List<String> ppkbdList = ['PPKBD', 'Sub PPKBD', 'TPK'];
 List<String> toolList = ['tool1', 'tool2', 'tool3'];
 

@@ -5,6 +5,8 @@ import "package:flutter/material.dart";
 import "package:flutter_easyloading/flutter_easyloading.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:intl/intl.dart";
+import "package:siga/api/format.dart";
+import "package:siga/api/models/response.dart";
 import "package:siga/api/models/user.dart";
 import "package:siga/api/urls.dart";
 import "package:siga/providers/api_provider.dart";
@@ -15,7 +17,6 @@ import "package:siga/vars.dart";
 class SigaApi {
   static const POST = 'POST';
   static const GET = 'GET';
-  String jenisPoktan = '';
   final Ref ref;
   final Dio session = Dio(
     BaseOptions(
@@ -27,7 +28,7 @@ class SigaApi {
 
   SigaApi({required this.ref});
 
-  List anggotaValid(Map poktan, String jenis, bool perempuan) {
+  List anggotaBKBValid(Map poktan, String jenis, bool perempuan) {
     List anggota =
         poktan["anggotaKelompok"].where((element) {
           if (jenis.toLowerCase() == 'bkb') {
@@ -53,6 +54,293 @@ class SigaApi {
     return anggota;
   }
 
+  Future<ApiResponse> upsertPoktan({required Map detailPoktan, required Map upsertData}) async {
+    final payload = formatUpsertPoktanBKB.map((k, v) {
+      return MapEntry(k, upsertData.containsKey(k) ? upsertData[k] : v);
+    });
+
+    String upsertPath = URL.poktanUpsert.replaceAll(
+      "{}",
+      (poktanList.elementAtOrNull(int.tryParse(detailPoktan["kodePoktan"] ?? "100")! - 1) ?? "unknown").capitalize!,
+    );
+    
+    Map<String, dynamic> headers = {
+      "Accept": "application/json, text/plain, */*",
+      "Authorization": "Bearer ${ref.read(userProvider).user!.token}",
+      "Content-Type": "application/json",
+    };
+
+    return await _request(
+      upsertPath,
+      POST,
+      data: payload,
+      headers: headers,
+    );
+  }
+
+  Future<Map> autoAnggotaPoktan({
+    required Map itemDetails,
+    List? listKeluarga,
+    required String jenis,
+    List? fixItems,
+    int? jumlah,
+    int? idRw,
+    int maxUsiaIbu = 45,
+    int maxUsiaAnak = 6
+  }) async {
+
+    //Function upsertTask
+    Future<Map> upsertTask(List c) async {
+      var format = {};
+
+      switch (jenis.toLowerCase()) {
+        case "bkb":
+          format = formatUpsertPoktanBKB;
+        case "bkl":
+          format = formatUpsertPoktanBKL;
+        // case "bkr":
+        //   format = formatUpserPoktanBKR;
+        // case "uppka":
+        //   format = formatUpsertPoktanUPPKA;
+        // case "pik-r":
+        //   format = formatUpsertPoktanPIKR;
+      }
+
+      if (format.isEmpty) {
+        throw UnimplementedError();
+      }
+      
+      final pengurus = itemDetails["pengurusKelompok"].map((p) {
+        return {
+          for (var k in format["pengurusKelompok"][0].keys.toList())
+            k: k != "nomor" ? p[k] : int.parse(p["nomorUrut"].toString())
+        };
+      }).toList();
+
+      List anggota = List.from(c);
+
+      if (itemDetails["anggotaKelompok"].length != c.length) {
+        anggota = itemDetails["anggotaKelompok"].map((a) {
+          return {
+            for (var k in format["anggotaKelompok"][0].keys.toList())
+            k: k != "nomor" ? a[k] : int.parse(a["nomorUrut"].toString())
+          };
+        }).toList() + c;
+      }
+      
+      Map payload = formatUpsertPoktanBKB.map((k, v) {
+        dynamic val;
+        
+        if (k == "pengurusKelompok") {
+          val = pengurus;
+        } else if (k == "anggotaKelompok") {
+          val = anggota;
+        } else {
+          val = itemDetails[k];
+        }
+        
+        return MapEntry(k, val);
+      });
+
+      payload.addAll({
+        "lastModified": DateTime.now().toUtc().toIso8601String(),
+        "lastModifiedBy": ref.read(userProvider).user!.userName,
+      });
+
+      print(payload);
+
+      String upsertPath = URL.poktanUpsert.replaceAll(
+        "{}",
+        jenis.capitalize!,
+      );
+      
+      Map<String, dynamic> headers = {
+        "Accept": "application/json, text/plain, */*",
+        "Authorization": "Bearer ${ref.read(userProvider).user!.token}",
+        "Content-Type": "application/json",
+      };
+
+      final upsertResp = await _request(
+        upsertPath,
+        POST,
+        data: payload,
+        headers: headers,
+      );
+      
+      if (upsertResp.status == 200) {
+        return {"status": 200, "data": c.length};
+      } else {
+        return upsertResp.toJson();
+      }
+    }
+
+
+    if (fixItems != null) {
+
+      return upsertTask(fixItems);
+    }
+
+    //If fixItems is null, run these.
+
+    //Assertion
+    listKeluarga!;
+    jumlah!;
+
+    // handle required "nomor" key in POST data
+    int nextNomor() {
+      return itemDetails["anggotaKelompok"].length > 0
+        ? (int.tryParse(itemDetails["anggotaKelompok"].last["nomorUrut"]) ?? 0) + 1
+        : 0;
+    }
+    
+    // handling duplicates
+    final anggotaNik = List.generate(itemDetails["anggotaKelompok"].length, (i) {
+      return itemDetails["anggotaKelompok"][i]["nik"];
+    }).toList();
+
+    if (jenis == "bkb") {
+      // final timestamp = DateTime.now().toUtc().toIso8601String();
+
+      // Function populateCalons
+      Future<bool> populateCalonsBKB(Map keluarga, List c) async {
+        if (c.length >= jumlah) {
+          return false;
+        }
+        
+        final detailKeluarga = await getChildData(keluarga["noKeluarga"]);
+
+        if (c.length == jumlah) {
+          return false;
+        }
+
+        final List sasaran = detailKeluarga
+          .where((x) => x["hubunganDenganKk"] == "Anak" && x["usia"] < 6)
+          .toList();
+
+        if (sasaran.isEmpty) {
+          return false;
+        }
+
+        final anak = sasaran.reduce((a, b) => a['usia'] < b['usia'] ? a : b);
+        final ibu = detailKeluarga.firstWhereOrNull((ele) => ele["hubunganDenganKk"] == "Istri")
+          ?? detailKeluarga[0];
+
+        Map calon = {
+          "nik": ibu["nik"],
+          "namaAnggota": ibu["nama"],
+          "nomorHp": (keluarga["noTelepon"] ?? "").length > 1
+            ? keluarga["noTelepon"]
+            : "-",
+          "nikAnggota": anak["nik"],
+          "namaAnak": anak["nama"],
+          "pbLahirAnak": double.parse((47 + Random().nextDouble() * 4).toStringAsFixed(1)),
+          "bbLahirAnak": ((270 + Random().nextInt(91)) * 10).toString(),
+          "kki": ibu["noKeluarga"],
+          "noKeluarga": ibu["noKeluarga"],
+          "tanggalLahirAnak": DateFormat("dd-MM-yyyy").format(parseAutoDate(anak["tanggalLahir"])!),
+          "BKBID": itemDetails["id"],
+          "statusAnggota": "1",
+          "flag": "Upsert"
+        };
+
+        if (c.length >= jumlah) {
+          return false;
+        }
+
+        c.add(calon);
+        return true;
+      } // Function populateCalons
+
+      // Main code is here
+      List calons = [];
+      
+      final result = await Future.wait(listKeluarga.map<Future<bool>>((keluarga) {
+        if (!anggotaNik.contains(keluarga["nik"])) {
+          return populateCalonsBKB(keluarga, calons);
+        } else {
+          return Future.value(false);
+        }
+      }).toList());
+
+      if (!result.every((elem) => elem)) {
+        print("Auto Anggota: some item skipped");
+      }
+
+      for (var i = 0; i < calons.length; i++) {
+        calons[i].addAll({
+          "nomor": nextNomor() + i,
+          "nomorUrut": (nextNomor() + i).toString(),
+        });
+      }
+      
+      return upsertTask(calons);
+    } else if (jenis == "bkl") {
+      // Function populate calons
+      Future<bool> populateCalonsBKL(Map keluarga, List c) async {
+        final detailKeluarga = await getChildData(keluarga["noKeluarga"]);
+
+        if (c.length == jumlah) {
+          return false;
+        }
+
+        final sasaran = detailKeluarga.where((x) => (x["usia"] >= 55 && x["usia"] < 70) || x["hubunganDenganKK"] == "Istri").toList();
+        if (sasaran.isEmpty) {
+          return false;
+        }
+
+        sasaran.shuffle();
+
+        final isLansia = sasaran[0]["usia"] >=  60;
+
+        Map calon = {
+          "nik": sasaran[0]["nik"],
+          "namaAnggota": sasaran[0]["nama"],
+          "nomorHp": keluarga["noTelepon"],
+          "statusLansia": isLansia ? "1" : "2",
+          "tingkatKemandirian": "1",
+          "kki": keluarga["noKeluarga"],
+          "noKeluarga": keluarga["noKeluarga"],
+          "statusLansia_tbl": isLansia ? "Ya" : "Tidak",
+          "tingkatKemandirian_tbl": "Mandiri",
+          "flag": "Upsert"
+        };
+
+        if (c.length >= jumlah) {
+          return false;
+        }
+
+        c.add(calon);
+        return true;
+      }
+
+      // main code is here
+      List calons = [];
+      final result = await Future.wait(listKeluarga.map<Future<bool>>((keluarga) {
+        if (!anggotaNik.contains(keluarga["nik"])) {
+          return populateCalonsBKL(keluarga, calons);
+        } else {
+          return Future.value(false);
+        }
+      }).toList());
+      
+      if (!result.every((elem) => elem)) {
+        print("Auto Anggota: some item skipped");
+      }
+      for (var i = 0; i < calons.length; i++) {
+        calons[i].addAll({
+          "nomor": nextNomor() + i,
+          "nomorUrut": (nextNomor() + i).toString(),
+          "nomorBKL": (nextNomor() + i).toString().padLeft(3, '0'),
+        });
+      }
+      
+      return upsertTask(calons);
+    }
+    
+    return {"status": 404, "data": "not supported"};
+  }
+  
+
   Future<bool> autoKegiatan({
     required Map item,
     required Map data,
@@ -70,7 +358,7 @@ class SigaApi {
       idPoktan: item["id"],
       jenis: jenis,
     );
-    var anggotaKelompok = anggotaValid(detailPoktan, jenis, data["perempuan"]);
+    var anggotaKelompok = anggotaBKBValid(detailPoktan, jenis, data["perempuan"]);
     if (jenis.toLowerCase() == "bkb") {
       await Future.wait(
         List.generate(anggotaKelompok.length, (index) {
@@ -189,7 +477,7 @@ class SigaApi {
         data: payload,
         headers: headers,
       );
-      return upsertResp;
+      return upsertResp.toJson();
     }
 
     if (editItem != null && editItem) {
@@ -200,7 +488,7 @@ class SigaApi {
 
       final orig = await _request(detailKegiatanPath, GET);
       List origPeserta =
-          orig["data"]["kegiatan${jenis.capitalize}"]["pesertaKegiatan"];
+          json.decode(orig.data)["kegiatan${jenis.capitalize}"]["pesertaKegiatan"];
 
       if (origPeserta.isNotEmpty) {
         await sendPayload(
@@ -240,7 +528,7 @@ class SigaApi {
           .replaceAll("{kelurahan}", item["kelurahanId"].toString());
 
       final parentResp = await _request(path, GET);
-      List? dataParent = parentResp["data"]["data"];
+      List? dataParent = json.decode(parentResp.data)["data"];
 
       if (dataParent!.isNotEmpty) {
         Map parent = dataParent[0];
@@ -290,47 +578,83 @@ class SigaApi {
         .replaceAll("{bulan}", tanggal.month.toString())
         .replaceAll("{tahun}", tanggal.year.toString())
         .replaceAll("{kki}", kki.replaceAll(" ", "%20"));
-
+     
     final resp = await _request(childPath, GET);
-    return resp["data"];
+    return json.decode(resp.data);
   }
 
   Future<List> getParentData({
-    String? nama,
-    required String nik,
     required String idKelurahan,
+    String? idRw,
+    String? idRt,
+    Map<String, dynamic>? filters,
   }) async {
     final user = ref.read(userProvider).user!;
     
     var tanggal = DateTime.now();
 
-    String path = URL.parentRekapPK
-        .replaceAll("{bulan}", tanggal.month.toString())
-        .replaceAll("{tahun}", tanggal.year.toString())
-        .replaceAll("{nik}", nik)
-        .replaceAll(
-          "{provinsi}",
-          user.wilProvinsi!.idProvinsi.toString(),
-        )
-        .replaceAll(
-          "{kabupaten}",
-          user.wilKabupaten!.idKabupaten.toString(),
-        )
-        .replaceAll(
-          "{kecamatan}",
-          user.wilKecamatan.idKecamatan.toString(),
-        )
-        .replaceAll("{kelurahan}", idKelurahan);
+    Map<String, dynamic> param = {
+      "bulan": tanggal.month.toString(),
+      "tahun": tanggal.year.toString(),
+      "page": "1",
+      "recordPerPage": "10",
+      "idProvinsi": user.wilProvinsi!.idProvinsi.toString(),
+      "idKabupaten": user.wilKabupaten!.idKabupaten.toString(),
+      "idKecamatan": user.wilKecamatan.idKecamatan.toString(),
+      "idKelurahan": idKelurahan,
+    };
 
-    if (nama != null) {
-      path = path.replaceAll("{nama}", nama);
+    if (idRw != null) {
+      param["idRw"] = idRw;
     } else {
-      path = path.replaceAll("&nama={nama}", "");
+      final kelurahan = user.wilKecamatan.wilKelurahan.firstWhereOrNull((elem) => elem.idKelurahan!.toString() == idKelurahan);
+      final result = await Future.wait(List<Future<List>>.generate(kelurahan!.wilRw.length, (i) {
+        final idRw = kelurahan.wilRw[i].idRw.toString();
+        return getParentData(idKelurahan: idKelurahan, idRw: idRw, idRt: idRt, filters: filters);
+      }));
+
+      return result.expand((x) => x).toList();
     }
 
-    final resp = await _request(path, GET);
+    if (idRt != null && param.containsKey("idRw")) {
+      param["idRt"] = idRt;
+    }
 
-    return resp["data"]["data"];
+    if (filters != null) {
+      param.addAll(filters);
+    }
+
+    Future<List> getParentDataTask(url) async {
+      final resp = await _request(url, GET);
+      return json.decode(resp.data)["data"];
+    }
+
+    final encodedParams = param.entries
+    .map((e) => '${e.key}=${Uri.encodeComponent(e.value)}')
+    .join('&');
+
+    final path = "${URL.parentRekapPK}?$encodedParams";
+    int total = 0;
+
+    for (int i = 0; i < 5; i++) {
+      final resp = await _request(path, GET);
+      if (json.decode(resp.data).containsKey("totalRecord")) {
+        total = json.decode(resp.data)["totalRecord"];
+        break;
+      }
+    }
+
+    List result = await Future.wait(List<Future>.generate((total / 10).ceil(), (i) {
+      param["page"] = (i+1).toString();
+      var pagedEncodedParam = param.entries
+      .map((e) => '${e.key}=${Uri.encodeComponent(e.value)}')
+      .join('&');
+      var pagedPath = "${URL.parentRekapPK}?$pagedEncodedParam";
+      return getParentDataTask(pagedPath);
+    }));
+    
+    var ret = result.expand((element) => element).toList();
+    return ret;
   }
 
   Future<int> _makePayloadBkb(
@@ -344,21 +668,17 @@ class SigaApi {
 
     try {
       var parsedTanggal = parseAutoDate(tanggal)!;
+      
+      var filters = {
+        "nama": anggota["namaAnggota"],
+        "nik": anggota["nik"],
+        "bulan": parsedTanggal.month.toString(),
+        "tahun": parsedTanggal.year.toString(),
+      };
 
-      String path = URL.parentRekapPK
-          .replaceAll("{bulan}", parsedTanggal.month.toString())
-          .replaceAll("{tahun}", parsedTanggal.year.toString())
-          .replaceAll("{nik}", anggota["nik"])
-          .replaceAll("{nama}", anggota["namaAnggota"])
-          .replaceAll("{provinsi}", item["provinsiId"].toString())
-          .replaceAll("{kabupaten}", item["kabupatenId"].toString())
-          .replaceAll("{kecamatan}", item["kecamatanId"].toString())
-          .replaceAll("{kelurahan}", item["kelurahanId"].toString());
+      final dataParent = await getParentData(idKelurahan: item["kelurahanId"], filters: filters);
 
-      final parentResp = await _request(path, GET);
-      List? dataParent = parentResp["data"]["data"];
-
-      if (dataParent!.isNotEmpty) {
+      if (dataParent.isNotEmpty) {
         Map parent = dataParent[0];
 
         String statusPus = parent["statusPus"] ? "1" : "2";
@@ -420,6 +740,8 @@ class SigaApi {
   Future<List> getPoktanKegiatan({
     required String idPoktan,
     required String jenis,
+    bool detailed = true,
+    bool silent = false,
   }) async {
     final user = ref.read(userProvider).user!;
     
@@ -441,8 +763,26 @@ class SigaApi {
         .replaceAll("{jenis}", jenis);
 
     await user.initDone;
-    final resp = await _request(path, GET);
-    List data = resp["data"]["kegiatan${jenis.capitalize}"];
+
+    final ret = await withRetry(() async {
+      final resp = await _request(path, GET);
+      List keg = json.decode(resp.data)["kegiatan${jenis.capitalize}"];
+      return keg;
+    }, silent: silent,
+    );
+
+    if (ret == null && !silent) {
+      print("$idPoktan $jenis");
+    }
+
+    List data = ret ?? [];
+
+    data.sort((a, b) => parseAutoDate(b["tanggalKegiatan"])!.compareTo(parseAutoDate(a["tanggalKegiatan"])!));
+
+    if (!detailed) {
+      return data;
+    }
+    
 
     for (int i = 0; i < data.length; i++) {
       data[i] = await fetchDetail(data[i]["tanggalKegiatan"]);
@@ -460,7 +800,7 @@ class SigaApi {
         .replaceAll("{jenis}", jenis);
 
     final resp = await _request(path, GET);
-    return resp["data"]["poktan${jenis.capitalize}"];
+    return json.decode(resp.data)["poktan${jenis.capitalize}"];
   }
 
   Future<List> getPoktan({int? idKelurahan, required String jenis}) async {
@@ -480,9 +820,14 @@ class SigaApi {
         .replaceAll('{jenis}', jenis.toLowerCase());
 
     await user.initDone;
-    final resp = await _request(path, GET);
-    List data = resp["data"];
-    return data;
+
+    for (int i = 0; i < 5; i++) {
+      final resp = await _request(path, GET);
+      if (resp.data.isNotEmpty) {
+        return json.decode(resp.data);
+      }
+    }
+    return [];
   }
 
   Future<Map<String, dynamic>> getDetailPoktanKegiatan({
@@ -497,7 +842,7 @@ class SigaApi {
 
     final resp = await _request(path, GET);
 
-    return resp["data"];
+    return json.decode(resp.data) as Map<String, dynamic>;
   }
 
   Future<bool> getUser({
@@ -508,7 +853,7 @@ class SigaApi {
   }) async {
 
     if (userData != null) {
-      showLoading(context: context);
+      showLoading();
       userData['api'] = this;
       ref.read(userProvider).update(User.fromJson(userData));
       await ref.read(userProvider).user!.initDone;
@@ -518,22 +863,22 @@ class SigaApi {
       return true;
     }
     
-    showLoading(context: context);
+    showLoading();
     Map data = {"username": username, "password": password, "idAplikasi": 2};
-    final Map resp = await _request(URL.auth, POST, data: data);
+    final resp = await _request(URL.auth, POST, data: data);
     dismiss();
-    if (resp['status'] == 200) {
+    if (resp.status == 200) {
       Map<String, dynamic> user =
-          resp['data']["authorities"][0]["attributes"]["user"];
+          json.decode(resp.data)["authorities"][0]["attributes"]["user"];
 
       if (user['namaLevelWilayah'] != 'Kecamatan') {
         showError('kamu tuh bukan operator Kecamatan!');
         return false;
       }
 
-      showLoading(context: context);
+      showLoading();
 
-      user['token'] = resp['data']['accessToken'];
+      user['token'] = json.decode(resp.data)['accessToken'];
       user['api'] = this;
       ref.read(userProvider).update(User.fromJson(user));
       while (true) {
@@ -549,100 +894,151 @@ class SigaApi {
       dismiss();
 
       showSuccess('Logged In!');
-    } else if (resp['status'] == 401) {
+    } else if (resp.status == 401) {
       showError('Username atau password salah!');
-    } else if (resp['status'] == 500) {
+    } else if (resp.status == 500) {
       showError('Username dan password kosong?');
     }
 
-    return resp['status'] == 200;
+    return resp.status == 200;
   }
 
   Future<List<WilKelurahan>> getKelurahan(int idKecamatan) async {
-    final resp = await _request("${URL.wilayahKelurahan}$idKecamatan", GET);
-    List kelurahanList = resp['data'];
-    return List.generate(kelurahanList.length, (i) {
-      var kelurahan = kelurahanList[i];
-      kelurahan['api'] = this;
-      return WilKelurahan.fromJson(kelurahan);
+    final ret = await withRetry(() async {
+      final resp = await _request("${URL.wilayahKelurahan}$idKecamatan", GET);
+      if (resp.data.isNotEmpty) {
+        List kelurahanList = json.decode(resp.data);
+        return List.generate(kelurahanList.length, (i) {
+          var kelurahan = kelurahanList[i];
+          kelurahan['api'] = this;
+          return WilKelurahan.fromJson(kelurahan);
+        });
+      }
+      return null;
     });
+    return ret ?? [];
   }
 
   Future<List<WilRw>> getRw(int idKelurahan) async {
-    final resp = await _request("${URL.wilayahRw}$idKelurahan", GET);
-    List rwList = resp["data"];
-    return List.generate(rwList.length, (i) {
-      var rw = rwList[i];
-      rw['api'] = this;
-      return WilRw.fromJson(rw);
+    final ret = await withRetry(() async {
+        final resp = await _request("${URL.wilayahRw}$idKelurahan", GET);
+        List rwList = json.decode(resp.data);
+        return List.generate(rwList.length, (i) {
+          var rw = rwList[i];
+          rw['api'] = this;
+          return WilRw.fromJson(rw);
+        });
     });
+
+    return ret ?? [];
   }
 
   Future<List<WilRt>> getRt(int idRw) async {
-    final resp = await _request("${URL.wilayahRt}$idRw", GET);
-    List rtList = resp["data"];
-    return List.generate(rtList.length, (i) => WilRt.fromJson(rtList[i]));
+     final ret = await withRetry(() async {
+        final resp = await _request("${URL.wilayahRt}$idRw", GET);
+        List rtList = json.decode(resp.data);
+        return List.generate(rtList.length, (i) => WilRt.fromJson(rtList[i])); 
+     });
+
+    return ret ?? [];
   }
 
-  Future<Map> _request(
+  Future<T?> withRetry<T>(Future<T> Function() fun, {bool silent = false}) async {
+    dynamic error;
+    for (int i = 0; i < 5; i++) {
+      try {
+        var ret = await fun();
+        if (ret != null) {
+          return ret;
+        }
+      } catch (e) {
+        error = e;
+      }
+    }
+    if (!silent) {
+      print(error);
+      showError("SIGA lagi ucak");
+    }
+    return null;
+  }
+
+  Future<ApiResponse> _request(
     String path,
     String method, {
     Map? data,
     Map<String, dynamic>? headers,
     bool? debug,
   }) async {
-    Map resp = {};
     session.options.method = method;
     session.options.responseType = ResponseType.plain;
+    int respStatus = 200;
+    String respData = "";
 
     if (headers != null) {
       session.options.headers = headers;
     }
 
     try {
-      final response = await session.request(path, data: data);
-      if (debug ?? false) {
-        print(response.toString());
-      }
+      final resp = await session.request(path, data: data);
 
-      try {
-        resp = {"status": 200, "data": json.decode(response.toString())};
-      } on FormatException {
-        resp = {"status": 200, "data": response.toString()};
+      if (debug ?? false) {
+        print(resp.toString());
       }
+      
+      respData = resp.toString();
+      
     } on DioException catch (e) {
       if (e.response != null) {
         try {
-          resp = json.decode(e.response!.data);
-          resp['status'] = int.tryParse(resp['status']);
+          var errData = json.decode(e.response!.data);
+
+          print("errData: $errData");
+          
+          if (errData.containsKey("status")) {
+            respStatus = int.parse(errData["status"].toString());
+            respData = errData["message"] ?? "";
+          } else {
+            respStatus = e.response!.statusCode!;
+            respData = e.response!.data;
+          }
+          
         } on FormatException {
-          resp = {
-            "status": e.response!.statusCode,
-            "message": e.response!.statusMessage,
-          };
-        }
-      } else {
-        if (e.type == DioExceptionType.receiveTimeout) {
-          resp = {"status": 504, "message": e.message};
-        } else if (e.type == DioExceptionType.sendTimeout) {
-          resp = {"status": 408, "message": e.message};
-        } else if (e.type == DioExceptionType.connectionTimeout) {
-          resp = {"status": 408, "message": e.message};
-        } else if (e.type == DioExceptionType.connectionError) {
-          resp = {"status": 408, "message": e.message};
-        } else {
-          resp = {"status": 0, "message": "unknown error"};
+          respStatus = e.response!.statusCode!;
+          respData = e.response!.statusMessage!;
         }
 
-        var message = apiStatus[resp['status']] ?? "gatau kenapa";
-        showError(message);
-        print(resp['message']);
+      } else {
+        respData = e.message ?? "";
+        respStatus = 0;
+
+        switch (e.type) {
+          case DioExceptionType.badCertificate:
+            respStatus = 495;
+          case DioExceptionType.receiveTimeout:
+            respStatus = 504;
+          case DioExceptionType.sendTimeout:
+            respStatus = 408;
+          case DioExceptionType.connectionTimeout:
+            respStatus = 408;
+          case DioExceptionType.connectionError:
+            respStatus = 408;
+          case DioExceptionType.badResponse:
+            respStatus = 400;
+          case DioExceptionType.cancel:
+            respStatus = 444;
+          case DioExceptionType.unknown:
+            print(e.requestOptions);
+            respStatus = 0;
+        }
+        var errMessage = apiStatus[respStatus] ?? "Gatau Kenapa";
+        showError(errMessage);
+        print("$errMessage\ncode: $respStatus\nmessage: $respData");
       }
     }
-    return resp;
+    return ApiResponse(status: respStatus, data: respData);
   }
 
-  void showLoading({String? message, required BuildContext context}) {
+  void showLoading({String? message}) {
     EasyLoading.instance.backgroundColor = Color.fromARGB(90, 2, 56, 125);
     EasyLoading.show(status: message);
   }

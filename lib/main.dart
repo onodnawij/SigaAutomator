@@ -8,7 +8,7 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutter_screenutil/flutter_screenutil.dart";
 import "package:package_info_plus/package_info_plus.dart";
 import "package:siga/pages/about.dart";
-import "package:siga/pages/anggota.dart";
+import "package:siga/pages/anggota/anggota.dart";
 import "package:siga/pages/form_r1.dart";
 import "package:siga/pages/home.dart";
 import "package:siga/pages/listing.dart";
