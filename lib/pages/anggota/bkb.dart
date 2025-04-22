@@ -212,7 +212,7 @@ class _AnggotaPageBKBState extends ConsumerState<AnggotaPageBKB> {
   void doSubmit(int jumlah, {String? idRw}) async {
     final api = ref.read(apiProvider);
     blockUI(context);
-    api.showLoading();
+    api.showLoading(message: "Okee, bentar yaa...");
 
     bool success = false;
     int done = 0;
@@ -285,7 +285,7 @@ class _AnggotaPageBKBState extends ConsumerState<AnggotaPageBKB> {
     }).toList();
 
     blockUI(context);
-    api.showLoading();
+    api.showLoading(message: "Bentar yaa...");
 
     Map result = {};
     

@@ -1,6 +1,7 @@
 import 'package:async/async.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:siga/api/format.dart';
 import 'package:siga/providers/api_provider.dart';
 import 'package:siga/providers/listing_provider.dart';
 import 'package:siga/pages/anggota/anggota.dart';
@@ -100,7 +101,7 @@ class _AnggotaPageBKLState extends ConsumerState<AnggotaPageBKL> {
   void doSubmit(int jumlah) async {
     final api = ref.read(apiProvider);
     blockUI(context);
-    api.showLoading();
+    api.showLoading(message: "Bentar yaa...");
 
     Map result = {};
 
@@ -157,8 +158,75 @@ class _AnggotaPageBKLState extends ConsumerState<AnggotaPageBKL> {
     } 
   }
 
-  void cleanseAnggota() {
-    //DO CLEANSE
+  void cleanseAnggota() async {
+    final cleanseItems = ref.read(anggotaBklItem).items
+    .where((x) => x["fatal"] ?? false).toList();
+
+    if (cleanseItems.isNotEmpty) {
+      var res = await showDialog(
+        context: context,
+        builder: (ctx) => CleanseDialog(
+          cleanseItems: cleanseItems,
+        )
+      );
+
+      if (res == true) {
+        if (widget.jenis.toLowerCase() == "bkl") {
+          doCleanse(cleanseItems);
+        }
+      }  
+    } else {
+      ref.read(apiProvider).showSuccess("Semua sampun valid !");
+    }
+  }
+
+  void doCleanse(List cleanseItems) async {
+    final api = ref.read(apiProvider);
+    final anggota = ref.read(anggotaBklItem).items;
+    final itemDetails = ref.read(detailBkl);
+    final fixes = cleanseItems.map((x) => x["nomorUrut"]);
+    final fixItems = List.from(anggota).map((x) {
+      var item = Map.from(x);
+      if (fixes.contains(item["nomorUrut"])) {
+        item["flag"] = "Delete";
+      }
+      return formatUpsertPoktanBKL["anggotaKelompok"][0].map((k, v) {
+        dynamic val;
+        if (k == "nomor") {
+          val = int.parse(item["nomorUrut"]);
+        } else if (k == "nomorBKL") {
+          val = int.parse(item["nomorUrut"]).toString().padLeft(3, "0");
+        } else {
+          val = item[k];
+        }
+        return MapEntry(k, val);
+      });
+    }).toList();
+
+    blockUI(context);
+    api.showLoading(message: "Okee, bentar...");
+
+    Map result = {};
+
+    try {
+      result = await api.autoAnggotaPoktan(
+        itemDetails: itemDetails,
+        jenis: widget.jenis,
+        fixItems: fixItems,
+      );
+    } finally {
+      api.dismiss();
+      unblockUI(context);
+
+      if (result["status"] == 200) {
+        api.showSuccess("Done cleansing!");
+        ref.read(anggotaBklItem).refresh();
+      } else {
+        api.showError("Error\nstatus: ${result['status']}\n msg: ${result['data']}");
+      }
+      
+    }
+    
   }
   
   @override
@@ -228,7 +296,7 @@ class _AnggotaPageBKLState extends ConsumerState<AnggotaPageBKL> {
                         child: Container(
                           width: 536,
                           padding: EdgeInsets.all(8),
-                          child: DataTableBKL(),
+                          child: DataTableBKL(data: anggota),
                         ),
                       ),
                     ),
@@ -283,7 +351,8 @@ class _AnggotaPageBKLState extends ConsumerState<AnggotaPageBKL> {
 }
 
 class DataTableBKL extends ConsumerWidget {
-  const DataTableBKL({super.key});
+  final List data;
+  const DataTableBKL({super.key, required this.data});
   
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -296,7 +365,6 @@ class DataTableBKL extends ConsumerWidget {
       color: ColorScheme.fromSeed(seedColor: Colors.green,).primary,
     );
     
-    final anggota = ref.watch(anggotaBklItem).items;
     TextStyle headerStyle = TextTheme.of(context).bodyMedium!.copyWith(
       fontWeight: FontWeight.bold,
       color: Theme.of(context).colorScheme.onSurfaceVariant,
@@ -362,8 +430,8 @@ class DataTableBKL extends ConsumerWidget {
           ),
         ],
         rows:
-          anggota.isNotEmpty
-          ? List.generate(anggota.length, (i) {
+          data.isNotEmpty
+          ? List.generate(data.length, (i) {
             return DataRow(
               cells: [
                 DataCell(
@@ -373,10 +441,10 @@ class DataTableBKL extends ConsumerWidget {
                 ),
                 DataCell(
                   Tooltip(
-                    message: anggota[i]["namaAnggota"],
+                    message: data[i]["namaAnggota"],
                     triggerMode: TooltipTriggerMode.longPress,
                     child: Text(
-                      anggota[i]["namaAnggota"],
+                      data[i]["namaAnggota"],
                       style: itemStyle,
                       overflow: TextOverflow.ellipsis,
                       maxLines: 1,
@@ -386,7 +454,7 @@ class DataTableBKL extends ConsumerWidget {
                 DataCell(
                   Center(
                     child: Text(
-                      anggota[i]["statusLansia"] == "1" ? "Ya" : "Tidak",
+                      data[i]["statusLansia"] == "1" ? "Ya" : "Tidak",
                       style: itemStyle,
                     ),
                   ),
@@ -394,7 +462,7 @@ class DataTableBKL extends ConsumerWidget {
                 DataCell(
                   Center(
                     child: Text(
-                      anggota[i]["tingkatKemandirian"] == "1" ? "Mandiri" : "Tidak",
+                      data[i]["tingkatKemandirian"] == "1" ? "Mandiri" : "Tidak",
                       style: itemStyle,
                     ),
                   ),
@@ -405,7 +473,7 @@ class DataTableBKL extends ConsumerWidget {
                     child: Skeletonizer(
                       enabled: ref.watch(statLoading),
                       child: Center(
-                        child: anggota[i]["fatal"] ?? false
+                        child: data[i]["fatal"] ?? false
                           ? fatalIcon
                           : validIcon
                       ),
@@ -430,4 +498,48 @@ class DataTableBKL extends ConsumerWidget {
       ),
     );
   }
+}
+
+class CleanseDialog extends ConsumerWidget {
+  final List cleanseItems;
+  const CleanseDialog({super.key, required this.cleanseItems});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return AlertDialog.adaptive(
+      insetPadding: EdgeInsets.symmetric(vertical: 80, horizontal: 20),
+      icon: Icon(Icons.checklist_rtl_rounded),
+      title: Text("Cleanse Anggota"),
+      content: SingleChildScrollView(
+        scrollDirection: Axis.vertical,
+        child: Column(
+          children: [
+            Text(
+              "Fix anggota KKI berbeda dengan data SIGA dan bersihkan semua anggota invalid atau tidak ditemukan ?",
+            ),
+            SizedBox(height: 20),
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: DataTableBKL(data: cleanseItems),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () {
+            Navigator.of(context).pop(false);
+          },
+          child: Text("gajadi"),
+        ),
+        TextButton(
+          onPressed: () {
+            Navigator.of(context).pop(true);
+          },
+          child: Text("lesgo"),
+        ),
+      ],
+    );
+  }
+  
 }

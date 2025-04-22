@@ -126,7 +126,7 @@ final Map formatUpsertPoktanBKB = {
     ],
 };
 
-final formatUpsertPoktanBKL = {
+final Map formatUpsertPoktanBKL = {
     "mengetahuiTempat": "",
     "mengetahuiTanggal": "",
     "mengetahuiKetuaNama": "",

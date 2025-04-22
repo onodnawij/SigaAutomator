@@ -128,7 +128,7 @@ class SigaApi {
         }).toList() + c;
       }
       
-      Map payload = formatUpsertPoktanBKB.map((k, v) {
+      Map payload = format.map((k, v) {
         dynamic val;
         
         if (k == "pengurusKelompok") {
@@ -146,8 +146,6 @@ class SigaApi {
         "lastModified": DateTime.now().toUtc().toIso8601String(),
         "lastModifiedBy": ref.read(userProvider).user!.userName,
       });
-
-      print(payload);
 
       String upsertPath = URL.poktanUpsert.replaceAll(
         "{}",
