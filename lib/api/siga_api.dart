@@ -18,15 +18,25 @@ class SigaApi {
   static const POST = 'POST';
   static const GET = 'GET';
   final Ref ref;
-  final Dio session = Dio(
-    BaseOptions(
-      baseUrl: URL.api,
-      receiveTimeout: requestTimeOutDuration,
-      sendTimeout: requestTimeOutDuration,
-    ),
-  );
+  Dio? session;
 
-  SigaApi({required this.ref});
+  SigaApi({required this.ref}) {
+    refreshSession();
+  }
+
+  void refreshSession() {
+    if (session != null) {
+      session!.close();
+    }
+    
+    session = Dio(
+      BaseOptions(
+        baseUrl: URL.api,
+        receiveTimeout: requestTimeOutDuration,
+        sendTimeout: requestTimeOutDuration,
+      ),
+    );
+  }
 
   List anggotaBKBValid(Map poktan, String jenis, bool perempuan) {
     List anggota =
@@ -370,7 +380,7 @@ class SigaApi {
     var anggotaKelompok = anggotaBKBValid(detailPoktan, jenis, data["perempuan"]);
     if (jenis.toLowerCase() == "bkb") {
       await Future.wait(
-        List.generate(anggotaKelompok.length, (index) {
+        List<Future>.generate(anggotaKelompok.length, (index) {
           return _makePayloadBkb(
             data["tanggal"],
             calon,
@@ -378,11 +388,11 @@ class SigaApi {
             anggotaKelompok[index],
             item,
           );
-        }),
+        }).toList(),
       );
     } else if (jenis.toLowerCase() == "bkl") {
       await Future.wait(
-        List.generate(anggotaKelompok.length, (index) {
+        List<Future>.generate(anggotaKelompok.length, (index) {
           return _makePayloadBkl(
             data["tanggal"],
             calon,
@@ -396,8 +406,9 @@ class SigaApi {
       return false;
     }
 
+    print(calon);
     if (calon.length > data["maxPeserta"]) {
-      calon = calon.sublist(0, data["maxPeserta"]);
+      calon = calon.sublist(0, int.parse(data["maxPeserta"].toString()));
     }
 
     Future<Map> sendPayload(c) async {
@@ -443,9 +454,9 @@ class SigaApi {
       materi.addAll({
         "materiPenyuluhanLainnya": data["materi"].last ? "1" : "0",
         "materiPenyuluhanLainnyaDeskripsi":
-            data["materiLainnya"].isEmpty
-                ? null
-                : data["materiLainnya"].isEmpty,
+          data["materi"].last
+            ? data["materiLainnya"]
+            : "",
       });
 
       Map<String, dynamic> narasumber = data["narasumber"]
@@ -490,14 +501,11 @@ class SigaApi {
     }
 
     if (editItem != null && editItem) {
-      String detailKegiatanPath = URL.poktanDetailKegiatan
-          .replaceAll("{id}", item["id"])
-          .replaceAll("{tanggal}", data["tanggal"])
-          .replaceAll("{jenis}", jenis.toLowerCase());
 
-      final orig = await _request(detailKegiatanPath, GET);
-      List origPeserta =
-          json.decode(orig.data)["kegiatan${jenis.capitalize}"]["pesertaKegiatan"];
+      final orig = await getDetailPoktanKegiatan(idPoktan: item["id"], jenis: jenis.toLowerCase(), tanggalKegiatan: data["tanggal"]);
+      List origPeserta = [];
+      
+      origPeserta = orig["kegiatan${jenis.capitalize}"]["pesertaKegiatan"];
 
       if (origPeserta.isNotEmpty) {
         await sendPayload(
@@ -603,12 +611,20 @@ class SigaApi {
         .replaceAll("{bulan}", tanggal.month.toString())
         .replaceAll("{tahun}", tanggal.year.toString())
         .replaceAll("{kki}", kki.replaceAll(" ", "%20"));
-     
-    final resp = await _request(childPath, GET, headers: headers);
-    final ret =  json.decode(resp.data.isEmpty ? "[]" : resp.data);
-    if (ret.isEmpty) {
-      print("WARNNG: empty return!\nurl: $childPath");
+    
+    List ret = [];
+
+    for (int i = 0; i < 5; i++) {
+      final resp = await _request(childPath, GET, headers: headers);
+      ret =  json.decode(resp.data.isEmpty ? "[]" : resp.data);
+      
+      if (ret.isEmpty) {
+        print("WARNNG: empty return!\nurl: $childPath\nretrying...");
+      } else {
+       break;
+      }
     }
+    
 
     return ret;
   }
@@ -636,7 +652,7 @@ class SigaApi {
 
     if (idRw != null) {
       param["idRw"] = idRw;
-    } else {
+    } else if (filters != null && !(filters.containsKey("nama") || filters.containsKey("nik"))) {
       final kelurahan = user.wilKecamatan.wilKelurahan.firstWhereOrNull((elem) => elem.idKelurahan!.toString() == idKelurahan);
       final result = await Future.wait(List<Future<List>>.generate(kelurahan!.wilRw.length, (i) {
         final idRw = kelurahan.wilRw[i].idRw.toString();
@@ -707,6 +723,7 @@ class SigaApi {
       };
 
       final dataParent = await getParentData(idKelurahan: item["kelurahanId"], filters: filters);
+      print(dataParent);
 
       if (dataParent.isNotEmpty) {
         Map parent = dataParent[0];
@@ -776,6 +793,10 @@ class SigaApi {
     final user = ref.read(userProvider).user!;
     
     Future<Map> fetchDetail(String tanggal) async {
+      
+      //TODO: Get this work for pikrm. its a bit silly
+      //if (jenis == "pikrm") {}
+      
       Map details = await getDetailPoktanKegiatan(
         idPoktan: idPoktan,
         tanggalKegiatan: tanggal,
@@ -807,7 +828,15 @@ class SigaApi {
 
     List data = ret ?? [];
 
-    data.sort((a, b) => parseAutoDate(b["tanggalKegiatan"])!.compareTo(parseAutoDate(a["tanggalKegiatan"])!));
+    if (jenis == "pikrm") {
+      for (var x in data) {
+        x["tanggalKegiatan"] = x["mengetahuiTanggal"];
+      }
+    }
+
+    if (data.isNotEmpty) {
+      data.sort((a, b) => parseAutoDate(b["tanggalKegiatan"])!.compareTo(parseAutoDate(a["tanggalKegiatan"])!));
+    }
 
     if (!detailed) {
       return data;
@@ -827,10 +856,19 @@ class SigaApi {
   }) async {
     var path = URL.poktanDetail
         .replaceAll("{id}", idPoktan)
-        .replaceAll("{jenis}", jenis);
-
-    final resp = await _request(path, GET);
-    return json.decode(resp.data)["poktan${jenis.capitalize}"];
+        .replaceAll("{jenis}", jenis == "uppka" ? "UPPKA" : jenis);
+    
+    for (int i = 0; i < 5; i++) {
+      try {
+        final resp = await _request(path, GET);
+        return json.decode(resp.data)["poktan${jenis.capitalize}"]; 
+      } catch(e, s) {
+        print(e);
+        print(s);
+      }
+    }
+    print("detail poktan is empty");
+    return {};
   }
 
   Future<List> getPoktan({int? idKelurahan, required String jenis}) async {
@@ -862,17 +900,44 @@ class SigaApi {
 
   Future<Map<String, dynamic>> getDetailPoktanKegiatan({
     required String idPoktan,
-    required String tanggalKegiatan,
+    String? tanggalKegiatan,
+    int? bulan,
+    int? tahun,
     required String jenis,
   }) async {
-    var path = URL.poktanDetailKegiatan
-        .replaceAll('{id}', idPoktan)
-        .replaceAll("{tanggal}", tanggalKegiatan)
-        .replaceAll("{jenis}", jenis);
+
+    var param = {
+      "id": idPoktan,
+      "jenisPoktan": jenis,
+    };
+    if (tanggalKegiatan != null) {
+      param["tanggalKegiatan"] = tanggalKegiatan;
+    }
+    if (bulan != null) {
+      param["bulan"] = bulan.toString();
+    }
+    if (tahun != null) {
+      param["tahun"] = tahun.toString();
+    }
+
+    var encodedParams = param.entries
+    .map((e) => '${e.key}=${Uri.encodeComponent(e.value)}')
+    .join('&');
+    
+    var path ="${URL.poktanDetailKegiatan}?$encodedParams";
 
     final resp = await _request(path, GET);
 
-    return json.decode(resp.data) as Map<String, dynamic>;
+    for (var i = 0; i < 5; i++) {
+      try {
+        return json.decode(resp.data) as Map<String, dynamic>;
+      } catch (e, s) {
+        print(e);
+        print(s);
+      }
+    }
+
+    return {};
   }
 
   Future<bool> getUser({
@@ -999,17 +1064,17 @@ class SigaApi {
     Map<String, dynamic>? headers,
     bool? debug,
   }) async {
-    session.options.method = method;
-    session.options.responseType = ResponseType.plain;
+    session!.options.method = method;
+    session!.options.responseType = ResponseType.plain;
     int respStatus = 200;
     String respData = "";
 
     if (headers != null) {
-      session.options.headers = headers;
+      session!.options.headers = headers;
     }
 
     try {
-      final resp = await session.request(path, data: data);
+      final resp = await session!.request(path, data: data);
 
       if (debug ?? false) {
         print(resp.toString());
@@ -1023,6 +1088,7 @@ class SigaApi {
           var errData = json.decode(e.response!.data);
 
           print("errData: $errData");
+          print("path: $path");
           
           if (errData.containsKey("status")) {
             respStatus = int.parse(errData["status"].toString());
@@ -1065,6 +1131,9 @@ class SigaApi {
         print("$errMessage\ncode: $respStatus\nmessage: $respData");
         print("Error: $e");
         print("stack: $s");
+
+        refreshSession();
+        
       }
     }
     return ApiResponse(status: respStatus, data: respData);

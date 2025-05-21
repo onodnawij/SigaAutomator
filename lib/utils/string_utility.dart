@@ -36,6 +36,7 @@ DateTime? parseAutoDate(String? dateString) {
   } else if (dmyPattern.hasMatch(dateString)) {
     return DateFormat('dd-MM-yyyy').parse(dateString);
   } else {
+    print(dateString);
     return null; // Handle unsupported formats
   }
 }

@@ -196,11 +196,7 @@ class WilKelurahan {
       return false;
     }
 
-    WilKelurahan({this.idKelurahan, this.idKelurahanDepdagri, this.namaKelurahan, SigaApi? api}) {
-      if (api!=null) {
-        postInit(api);
-      }
-    }
+    WilKelurahan({this.idKelurahan, this.idKelurahanDepdagri, this.namaKelurahan, SigaApi? api});
 
     Future<void> postInit(SigaApi api) async {
       wilRw = await api.getRw(idKelurahan!);
@@ -230,19 +226,11 @@ class WilKecamatan {
     String? idKecamatanDepdagri;
     String? namaKecamatan;
     List<WilKelurahan> wilKelurahan = [];
+    late Future _kelurahanGetter;
 
     Future<bool> get initDone async {
-      if (wilKelurahan.isNotEmpty) {
-        for (var kelurahan in wilKelurahan) {
-          if (!kelurahan.initDone) {
-            return false;
-          }
-
-          Future.delayed(Duration(milliseconds: 100));
-        }
-        return true;
-      }
-      return false;
+      await _kelurahanGetter;
+      return true;
     }
 
     WilKecamatan({
@@ -251,7 +239,7 @@ class WilKecamatan {
         this.namaKecamatan,
         SigaApi? api
     }) {
-      postInit(api!);
+      _kelurahanGetter = postInit(api!);
     }
 
     Future<void> postInit(SigaApi api) async {

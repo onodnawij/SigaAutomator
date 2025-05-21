@@ -11,6 +11,14 @@ import 'package:siga/utils/extensions.dart';
 import 'package:siga/utils/string_utility.dart' show parseAutoDate, textSplit;
 import 'package:siga/vars.dart';
 
+final _formDataProvider = StateProvider<Map>((ref) => {
+  'materi': [],
+  "materiLainnya": "",
+  'narasumber': [],
+  "narasumberLainnya": "",
+  'maxPeserta': null,
+  'perempuan': null,
+});
 
 enum FormGroup {narasumber, materi}
 
@@ -32,28 +40,28 @@ class _R1PageState extends ConsumerState<R1Page> {
   late DateTime selectedDate;
   bool perempuanOnly = false;
   TextEditingController maxPesertaController = TextEditingController.fromValue(TextEditingValue(text: '15'));
-  late List<bool> narasumberList;
-  late List<bool> materiList;
+  List<bool> narasumberList = [];
+  List<bool> materiList = [];
   final TextEditingController narasumberLainnyaController = TextEditingController();
   final TextEditingController materiLainnyaController = TextEditingController();
   late String title;
   int? index;
   late Map kelompok;
-  Map<String, dynamic> formData = {
-    'materi': [],
-    "materiLainnya": "",
-    'narasumber': [],
-    "narasumberLainnya": "",
-    'maxPeserta': null,
-    'perempuan': null,
-  };
+  // Map<String, dynamic> formData = {
+  //   'materi': [],
+  //   "materiLainnya": "",
+  //   'narasumber': [],
+  //   "narasumberLainnya": "",
+  //   'maxPeserta': null,
+  //   'perempuan': null,
+  // };
 
   @override
   void initState() {
     index = widget.options[0];
     kelompok = widget.options[1];
     title = '${widget.mode.capitalize} Register ${widget.jenis.toUpperCase()} - ${kelompok["namaKelompok"]}';
-    super.initState();
+    super.initState();    
   }
 
   @override
@@ -66,22 +74,24 @@ class _R1PageState extends ConsumerState<R1Page> {
   }
 
   Future<void> showConfirm(context) async {
+    final formDataState = ref.read(_formDataProvider);
+    
     List materi = materiPoktan[widget.jenis.toLowerCase()].sublist(1).where((e) {
-      return formData["materi"][materiPoktan[widget.jenis.toLowerCase()].indexOf(e)-1] == true;
+      return formDataState["materi"][materiPoktan[widget.jenis.toLowerCase()].indexOf(e)-1] == true;
     },).toList();
 
     List narasumber = narsumPoktan.values.where((value) {
-      return formData["narasumber"][narsumPoktan.values.toList().indexOf(value)] == true;
+      return formDataState["narasumber"][narsumPoktan.values.toList().indexOf(value)] == true;
     }).toList();
 
     List<Widget> narsumExpandChild = List<Widget>.generate(narasumber.length, (index) => ListTile(title: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [SizedBox(width: 24, child: Text("${index + 1}.")), Expanded(child: Text("${narasumber[index]}", style: TextTheme.of(context).labelLarge,))],),));
     List<Widget> materiExpandChild = List<Widget>.generate(materi.length, (index) => ListTile(title: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [SizedBox(width: 24, child: Text("${index + 1}.")), Expanded(child: Text("${materi[index]}", style: TextTheme.of(context).labelLarge))],),));
 
-    if (formData["narasumberLainnya"].isNotEmpty) {
-      narsumExpandChild.add(ListTile(title: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [SizedBox(width: 24, child: Text("${narsumExpandChild.length + 1}.", style: TextTheme.of(context).labelLarge)), Expanded(child: Text(formData["narasumberLainnya"], style: TextTheme.of(context).labelLarge,))])));
+    if (formDataState["narasumberLainnya"].isNotEmpty) {
+      narsumExpandChild.add(ListTile(title: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [SizedBox(width: 24, child: Text("${narsumExpandChild.length + 1}.", style: TextTheme.of(context).labelLarge)), Expanded(child: Text(formDataState["narasumberLainnya"], style: TextTheme.of(context).labelLarge,))])));
     }
-    if (formData["materiLainnya"].isNotEmpty) {
-      materiExpandChild.add(ListTile(title: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [SizedBox(width: 24, child: Text("${materiExpandChild.length + 1}.", style: TextTheme.of(context).labelLarge)), Expanded(child: Text(formData["materiLainnya"], style: TextTheme.of(context).labelLarge,))])));
+    if (formDataState["materiLainnya"].isNotEmpty) {
+      materiExpandChild.add(ListTile(title: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [SizedBox(width: 24, child: Text("${materiExpandChild.length + 1}.", style: TextTheme.of(context).labelLarge)), Expanded(child: Text(formDataState["materiLainnya"], style: TextTheme.of(context).labelLarge,))])));
     }
 
     showAdaptiveDialog(context: context, builder: (context) {
@@ -97,7 +107,7 @@ class _R1PageState extends ConsumerState<R1Page> {
             ListTile(
               title: Text("Tanggal Kegiatan"),
               titleTextStyle: TextTheme.of(context).labelLarge!.copyWith(fontWeight: FontWeight.bold),
-              subtitle: Text(formData["tanggal"].toString()),
+              subtitle: Text(formDataState["tanggal"].toString()),
             ),
             ExpansionTile(
               childrenPadding: EdgeInsets.only(left: 10),
@@ -124,7 +134,7 @@ class _R1PageState extends ConsumerState<R1Page> {
             ListTile(
               title: Text("Max Peserta"),
               titleTextStyle: TextTheme.of(context).labelLarge!.copyWith(fontWeight: FontWeight.bold),
-              subtitle: Text(formData["maxPeserta"].toString()),
+              subtitle: Text(formDataState["maxPeserta"].toString()),
             ),
           ],
         ),
@@ -137,15 +147,16 @@ class _R1PageState extends ConsumerState<R1Page> {
 
   Future<void> doSubmit(_) async {
     final api = ref.read(apiProvider);
+    final formDataState = ref.read(_formDataProvider);
     
-    if ((formData["materi"] as List).any((elem) => elem)) {
-      if ((formData["narasumber"] as List).any((elem) => elem)) {
-        if (formData["maxPeserta"] != null && maxPesertaController.text.isNotEmpty) {
+    if ((formDataState["materi"] as List).any((elem) => elem)) {
+      if ((formDataState["narasumber"] as List).any((elem) => elem)) {
+        if (formDataState["maxPeserta"] != null && maxPesertaController.text.isNotEmpty) {
           blockUI(context);
           api.showLoading(message: "Bentar yaa...");
           final ret = await api.autoKegiatan(
             item: kelompok,
-            data: formData,
+            data: formDataState,
             jenis: widget.jenis.toLowerCase(),
             editItem: widget.mode == "edit");
           await EasyLoading.dismiss();
@@ -176,30 +187,34 @@ class _R1PageState extends ConsumerState<R1Page> {
         return;
       }
 
-      setState(() {
-        selectedDate = date;
-        tanggalController.text = DateFormat('dd-MM-yyyy', 'id_ID').format(selectedDate);
-        updateFormData();
-      });
+      selectedDate = date;
+      tanggalController.text = DateFormat('dd-MM-yyyy', 'id_ID').format(selectedDate);
+      updateFormData();
     }
   }
 
   void onFormChecked (bool value, int index, FormGroup group) {
+    final formDataState = ref.read(_formDataProvider.notifier).state;
     if (group == FormGroup.materi) {
-      materiList[index] = value;
+      // materiList[index] = value;
+      formDataState["materi"][index] = value;
     } else if (group == FormGroup.narasumber) {
-      narasumberList[index] = value;
+      // narasumberList[index] = value;
+      formDataState["narasumber"][index] = value;
     }
   }
 
   void updateFormData () {
-    formData["tanggal"] = tanggalController.text;
-    formData['maxPeserta'] = int.tryParse(maxPesertaController.text) ?? -1;
-    formData['perempuan'] = perempuanOnly;
-    formData['narasumber'] = narasumberList;
-    formData["narasumberLainnya"] = narasumberLainnyaController.text;
-    formData['materi'] = materiList;
-    formData["materiLainnya"] = materiLainnyaController.text;
+    final formDataState = ref.read(_formDataProvider.notifier).state;
+    formDataState["tanggal"] = tanggalController.text;
+    formDataState['maxPeserta'] = int.tryParse(maxPesertaController.text) ?? -1;
+    formDataState['perempuan'] = perempuanOnly;
+    formDataState['narasumber'] = narasumberList;
+    formDataState["narasumberLainnya"] = narasumberLainnyaController.text;
+    formDataState['materi'] = materiList;
+    formDataState["materiLainnya"] = materiLainnyaController.text;
+
+    setState((){});
   }
 
   void prebuild() {
@@ -232,7 +247,10 @@ class _R1PageState extends ConsumerState<R1Page> {
     });
     
     tanggalController.text = DateFormat('dd-MM-yyyy', 'id_ID').format(selectedDate);
-    updateFormData();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      updateFormData();
+    });
     _isFinalized = true;
   }
 
@@ -339,7 +357,7 @@ class _R1PageState extends ConsumerState<R1Page> {
                   Row(
                     children: [
                       Expanded(
-                        child: Container(
+                        child: SizedBox(
                           height: 90,
                           child: FormGridItem(
                             index: narasumberList.length - 1,
@@ -347,7 +365,7 @@ class _R1PageState extends ConsumerState<R1Page> {
                             content: "Lainnya",
                             group: FormGroup.narasumber,
                             controller: narasumberLainnyaController,
-                            initValue: narasumberList[narasumberList.length-1],
+                            initValue: narasumberList.lastOrNull,
                             onChanged: onFormChecked,
                           )
                         ),
@@ -402,7 +420,7 @@ class _R1PageState extends ConsumerState<R1Page> {
                   Row(
                     children: [
                       Expanded(
-                        child: Container(
+                        child: SizedBox(
                           height: 90,
                           child: FormGridItem(
                             index: materiList.length - 1,
@@ -410,7 +428,7 @@ class _R1PageState extends ConsumerState<R1Page> {
                             readOnly: widget.mode == 'view',
                             group: FormGroup.materi,
                             controller: materiLainnyaController,
-                            initValue: materiList[materiList.length -1 ],
+                            initValue: materiList.lastOrNull,
                             onChanged: onFormChecked,
                           )
                         ),
@@ -533,7 +551,7 @@ class _R1PageState extends ConsumerState<R1Page> {
 }
 
 
-class FormGridItem extends StatefulWidget {
+class FormGridItem extends ConsumerStatefulWidget {
   final FormGroup group;
   final int index;
   final String content;
@@ -544,13 +562,16 @@ class FormGridItem extends StatefulWidget {
   const FormGridItem({super.key, required this.index, required this.content, this.onChanged, this.initValue, required this.group, this.readOnly, this.controller});
 
   @override
-  State<FormGridItem> createState() => _FormGridItemState();
+  ConsumerState<FormGridItem> createState() => _FormGridItemState();
 }
 
-class _FormGridItemState extends State<FormGridItem> {
+class _FormGridItemState extends ConsumerState<FormGridItem> {
   bool? isActive;
 
   void selfToggle() {
+    if (widget.readOnly ?? false) {
+      return;
+    }
     setState(() {
       isActive = !isActive!;
     });
@@ -562,9 +583,14 @@ class _FormGridItemState extends State<FormGridItem> {
 
   @override
   Widget build(BuildContext context) {
-    isActive = widget.readOnly ?? false
-      ? widget.initValue ?? false
-      : isActive ?? widget.initValue ?? false;
+    final valueState = ref.watch(_formDataProvider);
+    final bool? curValue = List.from(valueState[
+      widget.group == FormGroup.materi
+        ? "materi"
+        : "narasumber"
+    ]).elementAtOrNull(widget.index);
+    
+    isActive = curValue ?? false;
 
     List<Widget> contents = [
       Text(widget.content,
@@ -575,10 +601,16 @@ class _FormGridItemState extends State<FormGridItem> {
     ];
 
     if (widget.content == "Lainnya") {
+      var k = widget.group == FormGroup.materi
+        ? "materiLainnya"
+        : "narasumberLainnya";
       contents = [TextField(
         readOnly: widget.readOnly ?? false,
         controller: widget.controller,
         style: TextTheme.of(context).labelLarge,
+        onChanged: (value) {
+          ref.read(_formDataProvider.notifier).state[k] = value;
+        },
         decoration: InputDecoration(
           filled: true,
           label: Text("Lainnya :"),

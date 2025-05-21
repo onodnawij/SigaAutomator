@@ -1,3 +1,5 @@
+import "dart:math";
+
 import "package:carousel_slider_plus/carousel_slider_plus.dart";
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
@@ -5,10 +7,9 @@ import "package:intl/intl.dart";
 import "package:siga/providers/api_provider.dart";
 import "package:siga/providers/dashboard.dart";
 import "package:siga/providers/setting_provider.dart";
-// import "package:siga/providers/theme_provider.dart";
+import "package:siga/providers/theme_provider.dart";
 import "package:siga/vars.dart" as vars;
-import "package:skeletonizer/skeletonizer.dart";
-import 'package:fl_chart/fl_chart.dart';
+import 'package:syncfusion_flutter_charts/charts.dart';
 
 class HomePage extends ConsumerStatefulWidget {
   final String title = 'Dashboard';
@@ -118,7 +119,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                             child: CarouselSlider(
                               options: CarouselOptions(
                                 autoPlay: true,
-                                autoPlayInterval: Duration(seconds: 30),
+                                autoPlayInterval: Duration(seconds: 10),
                                 pauseAutoPlayOnManualNavigate: true,
                                 pauseAutoPlayOnTouch: true,
                                 autoPlayCurve: Curves.fastOutSlowIn,
@@ -126,17 +127,10 @@ class _HomePageState extends ConsumerState<HomePage> {
                                 enlargeCenterPage: true,
                                 viewportFraction: 1,
                               ),
-                              items: [1,2,3,4,5].map((i) {
-                                return Builder(
-                                  builder: (BuildContext ctx) {
-                                    if (i == 1) {
-                                      return PoktanProgress(index: i);
-                                    }
-                                    
-                                    return DummyData(index: i);
-                                  },
-                                );
-                              }).toList(),
+                              items: [
+                                PoktanProgress(prev: false),
+                                PoktanProgress(prev: true),
+                              ],
                             ),
                           ),
                         ),
@@ -147,7 +141,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                       child: Stack(
                         children: [FilledButton(
                           onPressed: (){
-                            ref.read(rekapPoktanProvider).refresh();
+                            Navigator.of(context).pushNamed("/reports");
                           },
                           child: Text('show more')),]
                       ),
@@ -207,7 +201,9 @@ class _HomePageState extends ConsumerState<HomePage> {
                                   size: 36,
                                 ),
                                 Text(
-                                  vars.poktanList[index].toUpperCase(),
+                                  vars.poktanList[index] == "pikrm"
+                                    ? "PIK-R"
+                                    : vars.poktanList[index].toUpperCase(),
                                   style: TextTheme.of(context).titleSmall,
                                 ),
                               ],
@@ -406,79 +402,82 @@ class DummyData extends StatelessWidget {
   }
 }
 
-class PoktanProgress extends StatefulWidget {
-  final int index;
-  const PoktanProgress({super.key, required this.index});
+class PoktanProgress extends ConsumerWidget {
+  final bool prev;
+  
+  const PoktanProgress({super.key, required this.prev});
 
   @override
-  State<PoktanProgress> createState() => _PoktanProgressState();
-}
-
-class _PoktanProgressState extends State<PoktanProgress> {
-
-  @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final loading = ref.watch(rekapPoktanProgressLoading);
+    
     return Container(
       width: MediaQuery.of(context).size.width,
       margin: EdgeInsets.fromLTRB(5, 4, 5, 6),
       child: Card.filled(
         color: Theme.of(context).colorScheme.surfaceContainerLow,
-        child: Consumer(
-          builder: (context, ref, child) {
-            return Skeletonizer(
-              enabled: ref.watch(rekapPoktanProvider).isLoading,
-              child: Container(
-                padding: const EdgeInsets.all(8.0),
-                child: Column(
-                  children: [
-                    Skeleton.keep(
-                      keep: true,
-                      child: Row(
-                        children: [
-                          Text('Capaian Poktan'),
-                        ],
-                      ),
+        child: Container(
+          padding: const EdgeInsets.all(8.0),
+          child: Column(
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text('Capaian Poktan'),
+                  IconButton(
+                    icon: AnimatedSwitcher(
+                      duration: const Duration(seconds: 1),
+                      switchInCurve: Curves.bounceIn,
+                      switchOutCurve: Curves.bounceInOut,
+                      child: loading
+                        ? SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2.2),
+                        )
+                        : Icon(Icons.refresh),
                     ),
-                    Wrap(
-                      children: [SizedBox(height: 30)],
-                    ),
-                    Flexible(
-                      fit: FlexFit.tight,
-                      child: Chart()
-                    ),
-                    Wrap(
-                      children: [SizedBox(height: 30)],
-                    ),
-                    Skeleton.keep(
-                      keep: true,
-                      child: Row(
-                        children: [
-                          Column(
-                            children: [
-                              Text('Bulan Lapor'),
-                            ],
-                          ),
-                          Column(
-                            children: [
-                              Text('   :  '),
-                            ],
-                          ),
-                          Column(
-                            children: [
-                              Text(
-                                DateFormat("MMMM yyyy").format(DateTime.now()),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                    Text(''),
-                  ],
-                ),
+                    tooltip: "Refresh",
+                    onPressed: loading ? null : () {
+                      ref.read(rekapPoktanProvider).refresh();
+                    },
+                  ),
+                ],
               ),
-            );
-          }
+              Wrap(
+                children: [SizedBox(height: 10)],
+              ),
+              Flexible(
+                fit: FlexFit.tight,
+                child: Chart(type: "progress", prev: prev)
+              ),
+              Wrap(
+                children: [SizedBox(height: 10)],
+              ),
+              Row(
+                children: [
+                  Column(
+                    children: [
+                      Text('Bulan Lapor'),
+                    ],
+                  ),
+                  Column(
+                    children: [
+                      Text('   :  '),
+                    ],
+                  ),
+                  Column(
+                    children: [
+                      Text(
+                        DateFormat("MMMM yyyy", Localizations.localeOf(context).toString()).format(prev ? ref.read(rekapPoktanProvider).prevBulanLapor: DateTime.now()),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              Text(''),
+            ],
+          ),
         ),
       )
     );
@@ -486,98 +485,190 @@ class _PoktanProgressState extends State<PoktanProgress> {
 }
 
 class Chart extends ConsumerStatefulWidget {
-  const Chart({super.key});
+  final String type;
+  final bool prev;
+  
+  const Chart({super.key, required this.type, required this.prev});
 
   @override
-  ConsumerState<Chart> createState() => ChartState(); 
+  ConsumerState<Chart> createState() => _ChartState();
 }
 
-class ChartState extends ConsumerState<Chart> {
-  bool _showRealData = false;
+class _ChartState extends ConsumerState<Chart> {
+  bool _animate = false;
 
   @override
   void initState() {
     super.initState();
-    // Trigger animation after a slight delay
-    Future.delayed(Duration(milliseconds: 400), () {
-      setState(() {
-        _showRealData = true;
-      });
+    // Start animation after slight delay
+    Future.delayed(const Duration(milliseconds: 400), () {
+      if (mounted) {
+        setState(() {
+          _animate = true;
+        });
+      }
     });
   }
-  
+
   @override
   Widget build(BuildContext context) {
-    final poktanProgress = ref.watch(rekapPoktanProvider).progress;
-
-    final List<BarChartGroupData> barGroups = [];
-    int i = 0;
-    poktanProgress.forEach((name, value) {
-      barGroups.add(
-        BarChartGroupData(
-          x: i,
-          barRods: [
-            BarChartRodData(
-              toY: _showRealData ? value : 0,
-              width: 30,
-              color: ref.watch(rekapPoktanProvider).isLoading ? Colors.transparent : Theme.of(context).colorScheme.tertiary,
-              borderRadius: BorderRadius.circular(6),
-            ),
-          ],
-          showingTooltipIndicators: [0],
-        ),
-      );
-      i++;
-    });
+    final data = widget.prev
+      ? ref.watch(rekapPoktanProvider).prevProgress
+      : ref.watch(rekapPoktanProvider).progress;
+    final loading = ref.watch(rekapPoktanProgressLoading);
+    final isDark = ref.watch(appThemeStateNotifier).isDarkModeEnabled;
     
-    return BarChart(
-      BarChartData(
-        maxY: 100,
-        barGroups: barGroups,
-        titlesData: FlTitlesData(
-          leftTitles: AxisTitles(
-            sideTitles: SideTitles(
-              showTitles: false,
-              reservedSize: 30,
-              getTitlesWidget: (value, _) => Text('${value.toInt()}%', style: TextTheme.of(context).bodySmall,),
-            ),
-          ),
-          bottomTitles: AxisTitles(
-            sideTitles: SideTitles(
-              showTitles: true,
-              getTitlesWidget: (value, _) {
-                final index = value.toInt();
-                if (index < poktanProgress.length) {
-                  return Padding(
-                    padding: const EdgeInsets.only(top: 8.0),
-                    child: Text(
-                      poktanProgress.keys.elementAt(index),
-                      style: TextStyle(fontSize: 12),
+    final List<_ChartData> chartData = [];
+
+    data.forEach((name, value) {
+      double yValue;
+      if (loading) {
+        yValue = 40 + Random().nextDouble() * 45; // Fake random skeleton data
+      } else {
+        yValue = _animate ? value : 0; // Animate from 0 to real value
+      }
+      chartData.add(_ChartData(name, yValue));
+    });
+
+    // Create the chart widget
+    final chartWidget = SfCartesianChart(
+      primaryXAxis: CategoryAxis(
+        majorGridLines: const MajorGridLines(width: 0),
+      ),
+      primaryYAxis: NumericAxis(
+        minimum: 0,
+        maximum: 100,
+        isVisible: false,
+      ),
+      plotAreaBorderWidth: 0,
+      tooltipBehavior: TooltipBehavior(
+        enable: !loading,
+        tooltipPosition: TooltipPosition.auto,
+        builder: (data, point, series, pointIndex, seriesIndex) {
+          final rekap = ref.read(rekapPoktanProvider)[point.x];
+          final done = widget.prev ? rekap.donePrev.length : rekap.done.length;
+
+          if (loading) {
+            return SizedBox.shrink();
+          }
+          
+          return Container(
+            margin: EdgeInsets.all(5),
+            child: RichText(
+              text: TextSpan(
+                children: [
+                  TextSpan(text: point.x + "\n", style: TextStyle(fontWeight: FontWeight.bold)),
+                  TextSpan(
+                    text: "$done / ${rekap.list.length}"
                     ),
-                  );
-                }
-                return SizedBox.shrink();
-              },
-            ),
-          ),
-          topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-        ),
-        barTouchData: BarTouchData(
-          enabled: true,
-          touchTooltipData: BarTouchTooltipData(
-            getTooltipColor: (group) => Colors.transparent,
-            getTooltipItem: (group, groupIndex, rod, rodIndex) {
-              final name = poktanProgress.keys.elementAt(group.x.toInt());
-              return BarTooltipItem('$name: ${rod.toY.toInt()}%', TextTheme.of(context).bodySmall!);
+                ],
+                style: TextTheme.of(context).bodySmall!.copyWith(color: Theme.of(context).colorScheme.onInverseSurface)
+              ),
+            )
+          );
+        },
+      ),
+      series: [
+        ColumnSeries<_ChartData, String>(
+          dataSource: chartData,
+          xValueMapper: (data, _) => data.label,
+          yValueMapper: (data, _) => data.value,
+          name: 'Progress', // Add series name for better tooltips
+          borderRadius: const BorderRadius.all(Radius.circular(6)),
+          color: loading ? Colors.grey.shade300 : Theme.of(context).colorScheme.tertiary.withAlpha(isDark ? 255 : 125),
+          animationDuration: loading ? 0 : 1200,
+          // Add data labels to show percentages on top of bars
+          dataLabelSettings: DataLabelSettings(
+            isVisible: !loading, // Only show when not loading
+            labelAlignment: ChartDataLabelAlignment.top,
+            // Format as percentage
+            builder: (data, point, series, pointIndex, seriesIndex) {
+              return Text('${data.value.toStringAsFixed(1)}%',
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurface,
+                  fontSize: 10,
+                ),
+              );
             },
           ),
-        ),
-        gridData: FlGridData(show: false),
-        borderData: FlBorderData(show: false),
-      ),
-      duration: Duration(milliseconds: 2000), // animation duration
-      curve: Curves.easeOutCubic,
+        )
+      ],
+    );
+
+    // Wrap the chart with CustomSkeletonizer when loading
+    if (loading) {
+      return CustomSkeletonizer(
+        child: chartWidget,
+      );
+    }
+    
+    return chartWidget;
+  }
+}
+
+// Custom skeletonizer for chart
+class CustomSkeletonizer extends StatefulWidget {
+  final Widget child;
+
+  const CustomSkeletonizer({super.key, required this.child});
+
+  @override
+  State<CustomSkeletonizer> createState() => _CustomSkeletonizerState();
+}
+
+class _CustomSkeletonizerState extends State<CustomSkeletonizer> with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _animation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1500),
+    )..repeat(reverse: true);
+    
+    _animation = Tween<double>(begin: 0.5, end: 0.9).animate(_controller);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _animation,
+      builder: (context, child) {
+        return ShaderMask(
+          shaderCallback: (Rect bounds) {
+            return LinearGradient(
+              colors: [
+                Colors.grey.shade700,
+                Colors.grey.shade300,
+                Colors.grey.shade700,
+              ],
+              stops: [
+                0.0,
+                _animation.value,
+                1.0,
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ).createShader(bounds);
+          },
+          child: widget.child,
+        );
+      },
     );
   }
+}
+
+class _ChartData {
+  final String label;
+  final double value;
+
+  _ChartData(this.label, this.value);
 }

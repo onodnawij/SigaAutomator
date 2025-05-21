@@ -14,6 +14,7 @@ import "package:siga/pages/home.dart";
 import "package:siga/pages/listing.dart";
 import "package:siga/pages/login.dart";
 import "package:siga/pages/register.dart";
+import "package:siga/pages/reports/reports.dart";
 import "package:siga/pages/root.dart";
 import "package:siga/pages/setting.dart";
 import "package:siga/providers/api_provider.dart";
@@ -74,6 +75,7 @@ class MyAppState extends ConsumerState<MyApp> {
       '/login': LoginPage(),
       '/setting': SettingPage(),
       '/about': AboutPage(),
+      '/reports': ReportsPage(),
     };
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       checkForUpdate();

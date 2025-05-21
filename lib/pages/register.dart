@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 import 'package:siga/providers/api_provider.dart';
 import 'package:siga/providers/listing_provider.dart';
 import 'package:siga/providers/register_provider.dart';
-import 'package:siga/utils/string_utility.dart' show formatDateLocalized;
+import 'package:siga/utils/string_utility.dart' show parseAutoDate;
 import 'package:siga/vars.dart';
 import 'package:skeletonizer/skeletonizer.dart';
 
@@ -90,7 +91,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
               child: SliverList(
                 delegate: SliverChildBuilderDelegate((ctx, index) {
                   Map?item = kegiatanList?[index];
-                  final String tanggalKegiatan = formatDateLocalized((item?["tanggalKegiatan"] ?? "01-01-2020"), context);
+                  final DateTime tanggalKegiatan = parseAutoDate(item?["tanggalKegiatan"] ?? "01-01-2020")!;
                   final int hadir = item?['pesertaKegiatan'].length ?? 0;
                   var narsums = [];
                   var materis = [];
@@ -143,7 +144,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
 class MyListItem extends StatefulWidget {
   final String menu;
   final String jenis;
-  final String tanggal;
+  final DateTime? tanggal;
   final int hadir;
   final String narsum;
   final String materi;
@@ -161,8 +162,13 @@ class _MyListItemState extends State<MyListItem> {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      elevation: 3,
+    var now = DateTime.now();
+    var safeTanggal = DateTime(now.year, now.month-3, 1);
+    var editable = widget.tanggal?.isAfter(safeTanggal) ?? false;
+    var tanggal = DateFormat("dd MMM yyyy", Localizations.localeOf(context).toString()).format(widget.tanggal!).toUpperCase();
+    
+    return Card.filled(
+      color: Theme.of(context).colorScheme.surfaceContainerLow,
       child: Padding(
         padding: const EdgeInsets.all(8.0),
         child: Row(
@@ -170,7 +176,7 @@ class _MyListItemState extends State<MyListItem> {
             SizedBox(
               width: 65,
               child: Center(
-                child: Text(widget.tanggal, textAlign: TextAlign.center,),
+                child: Text(tanggal , textAlign: TextAlign.center),
               ),
             ),
             SizedBox(width: 10,),
@@ -200,8 +206,16 @@ class _MyListItemState extends State<MyListItem> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(widget.hadir.toString(), overflow: TextOverflow.ellipsis, softWrap: false, maxLines: 1,),
-                        Text(widget.narsum, overflow: TextOverflow.ellipsis,softWrap: false, maxLines: 1),
-                        Text(widget.materi, overflow: TextOverflow.ellipsis,softWrap: false, maxLines: 1),
+                        Skeleton.replace(
+                          replace: true,
+                          replacement: Text("Narsum"),
+                          child: Text(widget.narsum, overflow: TextOverflow.ellipsis,softWrap: false, maxLines: 1),
+                        ),
+                        Skeleton.replace(
+                          replace: true,
+                          replacement: Text("MateriLorem"),
+                          child: Text(widget.materi, overflow: TextOverflow.ellipsis,softWrap: false, maxLines: 1),
+                        ),
                       ],
                     ),
                   ),
@@ -210,12 +224,19 @@ class _MyListItemState extends State<MyListItem> {
             ),
             Column(
               children: [
-                IconButton(onPressed: (){
-                  widget.navCallback(widget.index, "edit", widget.kelompok);
-                }, icon: Icon(Icons.edit_outlined), style: ButtonStyle(iconSize: WidgetStatePropertyAll(20))),
-                IconButton(onPressed: (){
-                  widget.navCallback(widget.index, "view", widget.kelompok);
-                }, icon: Icon(Icons.search_outlined),style: ButtonStyle(iconSize: WidgetStatePropertyAll(20)))
+                IconButton(
+                  onPressed: editable 
+                    ? () => widget.navCallback(widget.index, "edit", widget.kelompok)
+                    : null,
+                  icon: Icon(Icons.edit_outlined),
+                  style: ButtonStyle(
+                    iconSize: WidgetStatePropertyAll(editable ? 20 : 0)
+                  )
+                ),
+                IconButton(
+                  onPressed: () => widget.navCallback(widget.index, "view", widget.kelompok),
+                  icon: Icon(Icons.search_outlined),style: ButtonStyle(iconSize: WidgetStatePropertyAll(20))
+                )
               ],
             ),
           ],

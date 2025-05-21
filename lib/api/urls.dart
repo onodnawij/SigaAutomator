@@ -23,7 +23,7 @@ class _Poktan {
   static const detail = "/poktan/siga/poktan/getDetailPoktan?id={id}&jenisPoktan={jenis}";
   static const upsert = "/poktan/siga/poktan/upsertPoktan{}";
   static const listKegiatan = "/poktan/siga/poktan/getListPoktanKegiatan?id={id}&jenisPoktan={jenis}";
-  static const detailKegiatan = "/poktan/siga/poktan/getDetailPoktanKegiatan?id={id}&tanggalKegiatan={tanggal}&jenisPoktan={jenis}";
+  static const detailKegiatan = "/poktan/siga/poktan/getDetailPoktanKegiatan";
   static const upsertKegiatan = "/poktan/siga/poktan/upsertPoktanKegiatan?jenisPoktan={jenis}";
 }
 

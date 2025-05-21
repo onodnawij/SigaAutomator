@@ -6,6 +6,7 @@ import 'package:siga/providers/api_provider.dart';
 import 'package:siga/providers/listing_provider.dart';
 // import 'package:siga/providers/theme_provider.dart';
 import 'package:siga/utils/extensions.dart';
+import 'package:siga/utils/string_utility.dart';
 import 'package:siga/vars.dart';
 import 'package:skeletonizer/skeletonizer.dart';
 
@@ -330,6 +331,19 @@ class _MyGridItemState extends ConsumerState<MyGridItem> {
   final FocusNode _gridFocusNode = FocusNode();
   late Offset touch;
 
+  bool get isOutdated {
+    String tanggal = "2023-01-01";
+
+    if (widget.item != null) {
+      var cur = widget.item!["lastModified"].toString();
+      if (cur.isNotEmpty) {
+        tanggal = cur.split(" ")[0];
+      }
+    }
+
+    return parseAutoDate(tanggal)!.compareTo(DateTime(2023)) < 0;
+  }
+
   @override
   void dispose() {
     _gridFocusNode.dispose();
@@ -348,7 +362,7 @@ class _MyGridItemState extends ConsumerState<MyGridItem> {
           enabled: false,
           child: Text(
             widget.kelurahan,
-            style: TextStyle(color: Theme.of(context).colorScheme.onSurface),
+            style: TextStyle(color: Colors.black87),
           ),
         ),
       ],
@@ -372,8 +386,14 @@ class _MyGridItemState extends ConsumerState<MyGridItem> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.end,
                     children: [
-                      Skeleton.ignore(
-                        child: PopupMenuButton(
+                      isOutdated
+                        ? IconButton(
+                          icon: Icon(Icons.warning_amber_rounded, size: 20),
+                          onPressed: null,
+                          disabledColor: Theme.of(context).colorScheme.error,
+                          tooltip: "Belum Update",
+                        )
+                        : PopupMenuButton(
                           icon: Icon(Icons.chevron_left, size: 20),
                           tooltip: 'Opsi',
                           color: Theme.of(context).colorScheme.surfaceBright,
@@ -415,7 +435,6 @@ class _MyGridItemState extends ConsumerState<MyGridItem> {
                                 ),
                               ],
                         ),
-                      ),
                     ],
                   ),
                   Padding(
@@ -431,7 +450,7 @@ class _MyGridItemState extends ConsumerState<MyGridItem> {
                             textAlign: TextAlign.center,
                             style: TextStyle(
                               fontSize:
-                                  TextTheme.of(context).titleMedium?.fontSize,
+                                  TextTheme.of(context).titleSmall?.fontSize,
                             ),
                           ),
                         ),
