@@ -116,7 +116,7 @@ class MyAppState extends ConsumerState<MyApp> {
     } on PostgrestException {
       response = null;
       api.dismiss();
-      api.showError('Cant check update');
+      api.showError("Can't check update");
     }
 
     if (response != null) {
